@@ -50,7 +50,7 @@ def listar_metodos_pago(
     """Lista métodos de pago activos en orden secuencial. Visible para cualquier usuario autenticado."""
     metodos = (
         db.query(MetodoPago)
-        .filter(MetodoPago.activo == True)
+        .filter(MetodoPago.activo == True, MetodoPago.gym_id == current_user.gym_id)
         .order_by(MetodoPago.orden, MetodoPago.id)
         .all()
     )
@@ -64,9 +64,10 @@ def crear_metodo_pago(
     _: Usuario = Depends(_require_admin),
 ):
     # Asignar orden al final.
-    max_orden = db.query(MetodoPago).order_by(MetodoPago.orden.desc()).first()
+    max_orden = db.query(MetodoPago).filter(MetodoPago.gym_id == _.gym_id).order_by(MetodoPago.orden.desc()).first()
     siguiente = (max_orden.orden + 1) if max_orden else 0
     metodo = MetodoPago(
+        gym_id=_.gym_id,
         banco=payload.banco.strip(),
         tipo_cuenta=payload.tipo_cuenta.strip(),
         numero_cuenta=payload.numero_cuenta.strip(),
@@ -85,7 +86,7 @@ def actualizar_metodo_pago(
     db: Session = Depends(get_db),
     _: Usuario = Depends(_require_admin),
 ):
-    metodo = db.query(MetodoPago).filter(MetodoPago.id == metodo_id).first()
+    metodo = db.query(MetodoPago).filter(MetodoPago.id == metodo_id, MetodoPago.gym_id == _.gym_id).first()
     if not metodo:
         raise HTTPException(status_code=404, detail="Método de pago no encontrado.")
     if payload.banco is not None:
@@ -109,7 +110,7 @@ def eliminar_metodo_pago(
     db: Session = Depends(get_db),
     _: Usuario = Depends(_require_admin),
 ):
-    metodo = db.query(MetodoPago).filter(MetodoPago.id == metodo_id).first()
+    metodo = db.query(MetodoPago).filter(MetodoPago.id == metodo_id, MetodoPago.gym_id == _.gym_id).first()
     if not metodo:
         raise HTTPException(status_code=404, detail="Método de pago no encontrado.")
     db.delete(metodo)

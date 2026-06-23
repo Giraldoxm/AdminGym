@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from database import get_db
-from models import Usuario
+from models import SuperAdmin, Usuario
 
 SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
@@ -46,13 +46,39 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
-        if email is None:
+        gym_id = payload.get("gym_id")
+        if email is None or gym_id is None:
             raise credentials_exception
         email = email.strip().lower()
     except JWTError:
         raise credentials_exception
 
-    user = db.query(Usuario).filter(Usuario.email == email).first()
+    user = db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == gym_id).first()
     if user is None:
         raise credentials_exception
     return user
+
+
+def get_current_superadmin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> SuperAdmin:
+    """Análogo a get_current_user pero para el operador de la plataforma (sin gym_id).
+    El JWT de superadmin lleva scope='superadmin' en vez de gym_id — esto evita que
+    un token de gym sea aceptado aquí y viceversa."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        scope: str = payload.get("scope")
+        if email is None or scope != "superadmin":
+            raise credentials_exception
+        email = email.strip().lower()
+    except JWTError:
+        raise credentials_exception
+
+    admin = db.query(SuperAdmin).filter(SuperAdmin.email == email).first()
+    if admin is None:
+        raise credentials_exception
+    return admin

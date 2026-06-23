@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import MovimientoFinanciero, Pago, Plan, RolUsuario, TipoMovimiento, Usuario
+from modulos import gimnasio_tiene_modulo, require_modulo
 from schemas.usuario import UsuarioCreate, UsuarioResponse, UsuarioUpdate
 from security import get_current_user, get_password_hash
 from storage import guardar_archivo, eliminar_archivo
@@ -33,11 +34,12 @@ def crear_usuario(
 ):
     email_norm = (payload.email or "").strip().lower()
     doc_norm = (payload.documento_identidad or "").strip()
-    if db.query(Usuario).filter(Usuario.email == email_norm).first():
+    if db.query(Usuario).filter(Usuario.email == email_norm, Usuario.gym_id == current_user.gym_id).first():
         raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email.")
-    if db.query(Usuario).filter(Usuario.documento_identidad == doc_norm).first():
+    if db.query(Usuario).filter(Usuario.documento_identidad == doc_norm, Usuario.gym_id == current_user.gym_id).first():
         raise HTTPException(status_code=400, detail="Ya existe un usuario con ese documento de identidad.")
     nuevo = Usuario(
+        gym_id=current_user.gym_id,
         nombre=payload.nombre,
         email=email_norm,
         password_hash=get_password_hash(payload.password),
@@ -61,7 +63,7 @@ def actualizar_usuario(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
@@ -72,7 +74,7 @@ def actualizar_usuario(
         email_norm = payload.email.strip().lower()
         duplicado = (
             db.query(Usuario)
-            .filter(Usuario.email == email_norm, Usuario.id != usuario_id)
+            .filter(Usuario.email == email_norm, Usuario.gym_id == current_user.gym_id, Usuario.id != usuario_id)
             .first()
         )
         if duplicado:
@@ -89,7 +91,7 @@ def actualizar_usuario(
         doc_norm = payload.documento_identidad.strip()
         duplicado_doc = (
             db.query(Usuario)
-            .filter(Usuario.documento_identidad == doc_norm, Usuario.id != usuario_id)
+            .filter(Usuario.documento_identidad == doc_norm, Usuario.gym_id == current_user.gym_id, Usuario.id != usuario_id)
             .first()
         )
         if duplicado_doc:
@@ -117,7 +119,7 @@ def subir_foto(
     if foto.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail="Formato no permitido. Usa JPG, PNG o WEBP.")
 
-    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
@@ -136,7 +138,7 @@ def eliminar_usuario(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
     if usuario.foto_url:
@@ -150,7 +152,7 @@ def listar_usuarios(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    return db.query(Usuario).filter(Usuario.rol != RolUsuario.PENDIENTE).all()
+    return db.query(Usuario).filter(Usuario.rol != RolUsuario.PENDIENTE, Usuario.gym_id == current_user.gym_id).all()
 
 
 # IMPORTANTE: rutas estáticas ANTES de las parametrizadas con {usuario_id}.
@@ -161,12 +163,12 @@ def listar_pendientes(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    pendientes = db.query(Usuario).filter(Usuario.rol == RolUsuario.PENDIENTE).all()
+    pendientes = db.query(Usuario).filter(Usuario.rol == RolUsuario.PENDIENTE, Usuario.gym_id == current_user.gym_id).all()
     result = []
     for u in pendientes:
         plan_solicitado = None
         if u.plan_solicitado_id:
-            p = db.query(Plan).filter(Plan.id == u.plan_solicitado_id).first()
+            p = db.query(Plan).filter(Plan.id == u.plan_solicitado_id, Plan.gym_id == current_user.gym_id).first()
             if p:
                 plan_solicitado = {"id": p.id, "nombre": p.nombre, "precio": p.precio, "duracion_dias": p.duracion_dias}
         result.append({
@@ -196,6 +198,7 @@ def cumpleanos_hoy(
             Usuario.fecha_nacimiento.isnot(None),
             func.strftime("%m-%d", Usuario.fecha_nacimiento) == hoy_md,
             Usuario.fecha_vencimiento >= hoy,
+            Usuario.gym_id == _.gym_id,
         )
         .all()
     )
@@ -207,7 +210,7 @@ def obtener_usuario(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
     return usuario
@@ -226,11 +229,13 @@ def activar_usuario(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id == usuario_id, Usuario.rol == RolUsuario.PENDIENTE).first()
+    usuario = db.query(Usuario).filter(
+        Usuario.id == usuario_id, Usuario.rol == RolUsuario.PENDIENTE, Usuario.gym_id == current_user.gym_id
+    ).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario pendiente no encontrado.")
 
-    plan = db.query(Plan).filter(Plan.id == payload.plan_id, Plan.activo == True).first()
+    plan = db.query(Plan).filter(Plan.id == payload.plan_id, Plan.activo == True, Plan.gym_id == current_user.gym_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
 
@@ -240,6 +245,7 @@ def activar_usuario(
     usuario.fecha_vencimiento = nueva_fecha
 
     pago = Pago(
+        gym_id=current_user.gym_id,
         usuario_id=usuario.id,
         plan_id=plan.id,
         monto=payload.monto,
@@ -259,9 +265,9 @@ def activar_usuario(
 def buscar_por_huella(
     huella_id: str,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_modulo("biometria")),
 ):
-    usuario = db.query(Usuario).filter(Usuario.huella_id == huella_id).first()
+    usuario = db.query(Usuario).filter(Usuario.huella_id == huella_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado con esa huella.")
     return usuario
@@ -281,6 +287,7 @@ def guardar_huella_template(
     """Guarda el template de huella. Acepta JWT de admin/coach O el header X-Bridge-Secret del bridge .NET."""
     bridge_secret = os.environ.get("BRIDGE_SECRET", "")
     x_secret = request.headers.get("X-Bridge-Secret", "")
+    caller = None
     if x_secret != bridge_secret or not bridge_secret:
         # Si no viene del bridge, exigir JWT admin/coach
         try:
@@ -293,7 +300,8 @@ def guardar_huella_template(
             from jose import jwt as jose_jwt, JWTError
             payload_jwt = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             email = payload_jwt.get("sub")
-            caller = db.query(Usuario).filter(Usuario.email == email).first()
+            gym_id = payload_jwt.get("gym_id")
+            caller = db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == gym_id).first()
             if not caller or caller.rol.value not in ("admin", "coach"):
                 raise HTTPException(status_code=403, detail="Sin permisos.")
         except HTTPException:
@@ -304,6 +312,10 @@ def guardar_huella_template(
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    if caller is not None and caller.gym_id != usuario.gym_id:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    if not gimnasio_tiene_modulo(db, usuario.gym_id, "biometria"):
+        raise HTTPException(status_code=403, detail="El módulo de biometría no está activo para este gimnasio.")
     usuario.huella_template = payload.template
     usuario.huella_id = f"dp_{usuario_id}"
     db.commit()
@@ -318,6 +330,7 @@ def listar_usuarios_con_template(
     """Devuelve id, nombre y template de todos los usuarios con huella. Acepta JWT admin/coach o X-Bridge-Secret."""
     bridge_secret = os.environ.get("BRIDGE_SECRET", "")
     x_secret = request.headers.get("X-Bridge-Secret", "")
+    caller = None
     if not bridge_secret or x_secret != bridge_secret:
         try:
             from jose import jwt as jose_jwt, JWTError
@@ -327,18 +340,24 @@ def listar_usuarios_con_template(
                 raise HTTPException(status_code=401, detail="Not authenticated")
             payload_jwt = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             email = payload_jwt.get("sub")
-            caller = db.query(Usuario).filter(Usuario.email == email).first()
+            gym_id = payload_jwt.get("gym_id")
+            caller = db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == gym_id).first()
             if not caller or caller.rol.value not in ("admin", "coach"):
                 raise HTTPException(status_code=403, detail="Sin permisos.")
+            if not gimnasio_tiene_modulo(db, caller.gym_id, "biometria"):
+                raise HTTPException(status_code=403, detail="El módulo de biometría no está activo para este gimnasio.")
         except HTTPException:
             raise
         except Exception:
             raise HTTPException(status_code=401, detail="Not authenticated")
-    usuarios = (
-        db.query(Usuario.id, Usuario.nombre, Usuario.huella_template)
-        .filter(Usuario.huella_template.isnot(None))
-        .all()
-    )
+    # TODO multi-tenant (Fase 4): cuando se llama vía X-Bridge-Secret (caller=None) no hay
+    # forma de saber a qué gimnasio pertenece el bridge físico que pregunta — devuelve
+    # templates de TODOS los gimnasios hasta que el bridge mande su propio gym_id
+    # (JSB_GYM_ID). Cuando viene de un JWT admin/coach sí se acota a su gimnasio.
+    q = db.query(Usuario.id, Usuario.nombre, Usuario.huella_template).filter(Usuario.huella_template.isnot(None))
+    if caller is not None:
+        q = q.filter(Usuario.gym_id == caller.gym_id)
+    usuarios = q.all()
     return [
         {"id": u.id, "nombre": u.nombre, "template": u.huella_template}
         for u in usuarios

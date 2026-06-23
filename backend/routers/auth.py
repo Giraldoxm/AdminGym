@@ -16,6 +16,10 @@ router = APIRouter(tags=["Auth"])
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
+# TODO multi-tenant: hasta que exista resolución de gimnasio por subdominio/slug
+# en el login y el registro público, todo usuario nuevo cae en el gym por defecto.
+DEFAULT_GYM_ID = 1
+
 
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -28,7 +32,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(
-        data={"sub": usuario.email},
+        data={"sub": usuario.email, "gym_id": usuario.gym_id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return {"access_token": access_token, "token_type": "bearer"}
@@ -56,12 +60,13 @@ def registro_publico(
         raise HTTPException(status_code=422, detail="Género inválido.")
     email = (email or "").strip().lower()
     documento_identidad = (documento_identidad or "").strip()
-    if db.query(Usuario).filter(Usuario.email == email).first():
+    if db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == DEFAULT_GYM_ID).first():
         raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese email.")
-    if db.query(Usuario).filter(Usuario.documento_identidad == documento_identidad).first():
+    if db.query(Usuario).filter(Usuario.documento_identidad == documento_identidad, Usuario.gym_id == DEFAULT_GYM_ID).first():
         raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese documento de identidad.")
 
     nuevo = Usuario(
+        gym_id=DEFAULT_GYM_ID,
         nombre=nombre,
         email=email,
         password_hash=get_password_hash(password),
@@ -140,7 +145,7 @@ def actualizar_mi_perfil(
         email_norm = payload.email.strip().lower()
         duplicado = (
             db.query(Usuario)
-            .filter(Usuario.email == email_norm, Usuario.id != current_user.id)
+            .filter(Usuario.email == email_norm, Usuario.gym_id == current_user.gym_id, Usuario.id != current_user.id)
             .first()
         )
         if duplicado:
@@ -157,7 +162,7 @@ def actualizar_mi_perfil(
         doc_norm = payload.documento_identidad.strip()
         duplicado_doc = (
             db.query(Usuario)
-            .filter(Usuario.documento_identidad == doc_norm, Usuario.id != current_user.id)
+            .filter(Usuario.documento_identidad == doc_norm, Usuario.gym_id == current_user.gym_id, Usuario.id != current_user.id)
             .first()
         )
         if duplicado_doc:

@@ -147,6 +147,7 @@ def crear_marca(
         palier = payload.palier
 
     marca = MarcaRM(
+        gym_id=current_user.gym_id,
         usuario_id=current_user.id,
         ejercicio=ejercicio,
         peso=peso,

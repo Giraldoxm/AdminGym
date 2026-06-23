@@ -69,6 +69,7 @@ def crear_por_tipo(
 ):
     campo = _campo_o_404(tipo)
     medida = MedidaSalud(
+        gym_id=current_user.gym_id,
         usuario_id=current_user.id,
         fecha=payload.fecha,
         **{campo: payload.valor},

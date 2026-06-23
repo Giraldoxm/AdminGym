@@ -50,8 +50,8 @@ def _serializar(p: Plan) -> dict:
 
 
 @router.get("/")
-def listar_planes(db: Session = Depends(get_db)):
-    return [_serializar(p) for p in db.query(Plan).filter(Plan.activo == True).all()]
+def listar_planes(db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
+    return [_serializar(p) for p in db.query(Plan).filter(Plan.activo == True, Plan.gym_id == current_user.gym_id).all()]
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -61,6 +61,7 @@ def crear_plan(
     _: Usuario = Depends(_require_admin),
 ):
     plan = Plan(
+        gym_id=_.gym_id,
         nombre=payload.nombre,
         precio=payload.precio,
         duracion_dias=payload.duracion_dias,
@@ -81,7 +82,7 @@ def actualizar_plan(
     db: Session = Depends(get_db),
     _: Usuario = Depends(_require_admin),
 ):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    plan = db.query(Plan).filter(Plan.id == plan_id, Plan.gym_id == _.gym_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
     if payload.nombre is not None:
@@ -109,7 +110,7 @@ def solicitar_plan(
 ):
     if current_user.rol != RolUsuario.PENDIENTE:
         raise HTTPException(status_code=403, detail="Solo usuarios pendientes pueden solicitar un plan.")
-    plan = db.query(Plan).filter(Plan.id == plan_id, Plan.activo == True).first()
+    plan = db.query(Plan).filter(Plan.id == plan_id, Plan.activo == True, Plan.gym_id == current_user.gym_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
     current_user.plan_solicitado_id = plan_id
@@ -123,7 +124,7 @@ def eliminar_plan(
     db: Session = Depends(get_db),
     _: Usuario = Depends(_require_admin),
 ):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    plan = db.query(Plan).filter(Plan.id == plan_id, Plan.gym_id == _.gym_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
     plan.activo = False

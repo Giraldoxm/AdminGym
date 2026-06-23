@@ -155,6 +155,121 @@ if engine.url.get_backend_name() == "sqlite":
             _conn.execute(text("ALTER TABLE pagos_new RENAME TO pagos"))
             _conn.commit()
 
+    # Migración multi-tenant: gimnasio por defecto + gym_id en usuarios
+    with engine.connect() as _conn:
+        _conn.execute(text(
+            "INSERT INTO gimnasios (id, nombre, slug, activo, created_at) "
+            "SELECT 1, 'Jain Sport Box', 'jain-sport-box', 1, CURRENT_TIMESTAMP "
+            "WHERE NOT EXISTS (SELECT 1 FROM gimnasios WHERE id = 1)"
+        ))
+        _conn.commit()
+
+    with engine.connect() as _conn:
+        try:
+            _conn.execute(text("ALTER TABLE usuarios ADD COLUMN gym_id INTEGER"))
+            _conn.commit()
+        except Exception:
+            pass
+        _conn.execute(text("UPDATE usuarios SET gym_id = 1 WHERE gym_id IS NULL"))
+        _conn.commit()
+
+    # Migración: reconstruir usuarios con gym_id NOT NULL + uniques compuestos
+    # (gym_id, email) y (gym_id, documento_identidad), en vez de uniques globales.
+    with engine.connect() as _conn:
+        _ya_migrado = _conn.execute(text(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'usuarios' AND sql LIKE '%uq_usuario_gym_email%'"
+        )).first()
+        if not _ya_migrado:
+            _conn.execute(text("""
+                CREATE TABLE usuarios_new (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    gym_id INTEGER NOT NULL REFERENCES gimnasios(id),
+                    nombre VARCHAR(120) NOT NULL,
+                    email VARCHAR(120) NOT NULL,
+                    password_hash VARCHAR(256) NOT NULL,
+                    rol VARCHAR(20) NOT NULL DEFAULT 'cliente',
+                    documento_identidad VARCHAR(20) NOT NULL,
+                    huella_id VARCHAR(100) UNIQUE,
+                    huella_template TEXT,
+                    telefono VARCHAR(20),
+                    fecha_vencimiento DATE,
+                    esta_en_gym BOOLEAN NOT NULL DEFAULT 0,
+                    foto_url VARCHAR(300),
+                    genero VARCHAR(20),
+                    fecha_nacimiento DATE,
+                    plan_solicitado_id INTEGER,
+                    created_at DATETIME NOT NULL,
+                    CONSTRAINT uq_usuario_gym_email UNIQUE (gym_id, email),
+                    CONSTRAINT uq_usuario_gym_documento UNIQUE (gym_id, documento_identidad)
+                )
+            """))
+            _conn.execute(text(
+                "INSERT INTO usuarios_new "
+                "(id, gym_id, nombre, email, password_hash, rol, documento_identidad, huella_id, "
+                " huella_template, telefono, fecha_vencimiento, esta_en_gym, foto_url, genero, "
+                " fecha_nacimiento, plan_solicitado_id, created_at) "
+                "SELECT id, gym_id, nombre, email, password_hash, rol, documento_identidad, huella_id, "
+                "       huella_template, telefono, fecha_vencimiento, esta_en_gym, foto_url, genero, "
+                "       fecha_nacimiento, plan_solicitado_id, created_at "
+                "FROM usuarios"
+            ))
+            _conn.execute(text("DROP TABLE usuarios"))
+            _conn.execute(text("ALTER TABLE usuarios_new RENAME TO usuarios"))
+            _conn.commit()
+
+    # Migración multi-tenant: gym_id en el resto de las tablas del dominio.
+    # Todas caen en el gym por defecto (id=1) vía DEFAULT 1 — no necesitan
+    # reconstrucción porque ninguna tenía un UNIQUE que choque con gym_id.
+    _migraciones_tenant = [
+        "ALTER TABLE planes ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE pagos ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE wods ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE productos ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE ventas ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE asistencias ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE movimientos_financieros ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE medidas_salud ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE marcas_rm ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE alertas_membresia ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE metodos_pago ADD COLUMN gym_id INTEGER NOT NULL DEFAULT 1",
+    ]
+    with engine.connect() as _conn:
+        for _sql in _migraciones_tenant:
+            try:
+                _conn.execute(text(_sql))
+                _conn.commit()
+            except Exception:
+                pass
+
+    # Migración: reconstruir ejercicios. 'nombre' era UNIQUE global; con multi-tenant
+    # cada gimnasio necesita su propio catálogo, así que el unique pasa a (gym_id, nombre).
+    with engine.connect() as _conn:
+        _ya_migrado_ej = _conn.execute(text(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'ejercicios' AND sql LIKE '%uq_ejercicio_gym_nombre%'"
+        )).first()
+        if not _ya_migrado_ej:
+            _conn.execute(text("""
+                CREATE TABLE ejercicios_new (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    gym_id INTEGER NOT NULL REFERENCES gimnasios(id) DEFAULT 1,
+                    nombre VARCHAR(150) NOT NULL,
+                    video_url VARCHAR(500),
+                    descripcion TEXT,
+                    categoria VARCHAR(50),
+                    created_at DATETIME NOT NULL,
+                    CONSTRAINT uq_ejercicio_gym_nombre UNIQUE (gym_id, nombre)
+                )
+            """))
+            _conn.execute(text(
+                "INSERT INTO ejercicios_new (id, gym_id, nombre, video_url, descripcion, categoria, created_at) "
+                "SELECT id, 1, nombre, video_url, descripcion, categoria, created_at FROM ejercicios"
+            ))
+            _conn.execute(text("DROP TABLE ejercicios"))
+            _conn.execute(text("ALTER TABLE ejercicios_new RENAME TO ejercicios"))
+            _conn.commit()
+
 import os
 from pathlib import Path
 
@@ -164,11 +279,13 @@ from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from routers import alertas, asistencia, auth, ejercicios, finanzas, marcas, metodos_pago, pagos, planes, productos, salud, usuarios, ventas, wods
-from seed import seed_planes, seed_admin
+from routers import alertas, asistencia, auth, ejercicios, finanzas, marcas, metodos_pago, pagos, planes, productos, salud, superadmin, usuarios, ventas, wods
+from seed import seed_planes, seed_admin, seed_modulos, seed_superadmin
 
 seed_planes()
 seed_admin()
+seed_modulos()
+seed_superadmin()
 
 app = FastAPI(
     title="Jain Sport Box System",
@@ -284,3 +401,4 @@ app.include_router(marcas.router)
 app.include_router(alertas.router)
 app.include_router(metodos_pago.router)
 app.include_router(ejercicios.router)
+app.include_router(superadmin.router)

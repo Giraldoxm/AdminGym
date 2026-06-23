@@ -35,19 +35,19 @@ def balance(
     current_user: Usuario = Depends(_require_admin),
 ):
     # ── Ingresos de membresías (tabla pagos) ──
-    q_pagos = db.query(Pago)
+    q_pagos = db.query(Pago).filter(Pago.gym_id == current_user.gym_id)
     q_pagos = _apply_date_filter(q_pagos, Pago.fecha_pago, fecha_desde, fecha_hasta)
     pagos = q_pagos.all()
     total_membresias = sum(p.monto for p in pagos)
 
     # ── Ingresos de tienda (tabla ventas) ──
-    q_ventas = db.query(Venta)
+    q_ventas = db.query(Venta).filter(Venta.gym_id == current_user.gym_id)
     q_ventas = _apply_date_filter(q_ventas, Venta.fecha_venta, fecha_desde, fecha_hasta)
     ventas = q_ventas.all()
     total_ventas = sum(v.total for v in ventas)
 
     # ── Movimientos manuales ──
-    q_mov = db.query(MovimientoFinanciero)
+    q_mov = db.query(MovimientoFinanciero).filter(MovimientoFinanciero.gym_id == current_user.gym_id)
     q_mov = _apply_date_filter(q_mov, MovimientoFinanciero.fecha, fecha_desde, fecha_hasta)
     movimientos = q_mov.all()
 
@@ -104,7 +104,7 @@ def listar_movimientos(
 
     # ── Pagos de membresías ──
     if tipo in (None, "ingreso"):
-        q = db.query(Pago).join(Plan, isouter=True).join(
+        q = db.query(Pago).filter(Pago.gym_id == current_user.gym_id).join(Plan, isouter=True).join(
             Usuario, Pago.usuario_id == Usuario.id, isouter=True
         )
         q = _apply_date_filter(q, Pago.fecha_pago, fecha_desde, fecha_hasta)
@@ -125,7 +125,7 @@ def listar_movimientos(
             })
 
         # ── Ventas de tienda ──
-        q2 = db.query(Venta).join(Usuario, Venta.usuario_id == Usuario.id, isouter=True)
+        q2 = db.query(Venta).filter(Venta.gym_id == current_user.gym_id).join(Usuario, Venta.usuario_id == Usuario.id, isouter=True)
         q2 = _apply_date_filter(q2, Venta.fecha_venta, fecha_desde, fecha_hasta)
         for v in q2.order_by(Venta.fecha_venta.desc()).all():
             items.append({
@@ -142,7 +142,7 @@ def listar_movimientos(
             })
 
     # ── Movimientos manuales ──
-    q3 = db.query(MovimientoFinanciero)
+    q3 = db.query(MovimientoFinanciero).filter(MovimientoFinanciero.gym_id == current_user.gym_id)
     q3 = _apply_date_filter(q3, MovimientoFinanciero.fecha, fecha_desde, fecha_hasta)
     if tipo in ("ingreso", "egreso"):
         q3 = q3.filter(MovimientoFinanciero.tipo == TipoMovimiento(tipo))
@@ -172,10 +172,11 @@ def crear_movimiento(
     current_user: Usuario = Depends(_require_admin),
 ):
     if payload.usuario_id:
-        if not db.query(Usuario).filter(Usuario.id == payload.usuario_id).first():
+        if not db.query(Usuario).filter(Usuario.id == payload.usuario_id, Usuario.gym_id == current_user.gym_id).first():
             raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
     mov = MovimientoFinanciero(
+        gym_id=current_user.gym_id,
         tipo=TipoMovimiento(payload.tipo),
         concepto=payload.concepto,
         categoria=payload.categoria,
@@ -202,6 +203,7 @@ def eliminar_movimiento(
     mov = db.query(MovimientoFinanciero).filter(
         MovimientoFinanciero.id == movimiento_id,
         MovimientoFinanciero.fuente == "manual",
+        MovimientoFinanciero.gym_id == current_user.gym_id,
     ).first()
     if not mov:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado o no es eliminable.")
@@ -218,7 +220,10 @@ def buscar_usuarios(
     term = f"%{q}%"
     usuarios = (
         db.query(Usuario)
-        .filter((Usuario.nombre.ilike(term)) | (Usuario.email.ilike(term)))
+        .filter(
+            (Usuario.nombre.ilike(term)) | (Usuario.email.ilike(term)),
+            Usuario.gym_id == current_user.gym_id,
+        )
         .limit(10)
         .all()
     )

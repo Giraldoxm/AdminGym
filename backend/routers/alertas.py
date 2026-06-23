@@ -70,6 +70,7 @@ def generar_alertas(db: Session) -> int:
 
         dias = (u.fecha_vencimiento - hoy).days
         db.add(AlertaMembresia(
+            gym_id=u.gym_id,
             usuario_id=u.id,
             fecha_vencimiento=u.fecha_vencimiento,
             dias_anticipacion=dias,
@@ -86,7 +87,7 @@ def listar_alertas(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    q = db.query(AlertaMembresia)
+    q = db.query(AlertaMembresia).filter(AlertaMembresia.gym_id == current_user.gym_id)
     if solo_pendientes:
         q = q.filter(AlertaMembresia.enviada == False)
     alertas = q.order_by(AlertaMembresia.dias_anticipacion.asc(), AlertaMembresia.fecha_creacion.desc()).all()
@@ -111,7 +112,9 @@ def contar_pendientes(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    total = db.query(AlertaMembresia).filter(AlertaMembresia.enviada == False).count()
+    total = db.query(AlertaMembresia).filter(
+        AlertaMembresia.enviada == False, AlertaMembresia.gym_id == current_user.gym_id
+    ).count()
     return {"pendientes": total}
 
 
@@ -130,7 +133,9 @@ def marcar_enviada(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    alerta = db.query(AlertaMembresia).filter(AlertaMembresia.id == alerta_id).first()
+    alerta = db.query(AlertaMembresia).filter(
+        AlertaMembresia.id == alerta_id, AlertaMembresia.gym_id == current_user.gym_id
+    ).first()
     if not alerta:
         raise HTTPException(status_code=404, detail="Alerta no encontrada.")
     alerta.enviada = True
@@ -145,7 +150,9 @@ def descartar_alerta(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    alerta = db.query(AlertaMembresia).filter(AlertaMembresia.id == alerta_id).first()
+    alerta = db.query(AlertaMembresia).filter(
+        AlertaMembresia.id == alerta_id, AlertaMembresia.gym_id == current_user.gym_id
+    ).first()
     if not alerta:
         raise HTTPException(status_code=404, detail="Alerta no encontrada.")
     db.delete(alerta)

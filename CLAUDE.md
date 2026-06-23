@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 JainSportBox is a CrossFit Box Management System with a Python/FastAPI backend and Vue.js 3 frontend. It handles members, memberships, attendance (via fingerprint sensor), WODs, finances, health metrics, personal records (1RM), and a product shop.
 
+The backend is multi-tenant: every gimnasio (tenant) is isolated by `gym_id`, and a separate SuperAdmin role manages gimnasios and which optional modules (WODs, biometría) each one has active. See "Multi-tenant (SaaS)" below and `MULTI_TENANT.md` at the repo root for the full plan, status, and pending work.
+
 ## Development Commands
 
 ### Launcher (recomendado)
@@ -61,13 +63,14 @@ There are no test commands — no test suite exists in this project.
 - Bridge: `servicio_biometrico/` — .NET 4.8 Windows app for DigitalPersona U.are.U 4500 fingerprint reader
 
 **Backend layout:**
-- `backend/main.py` — FastAPI app creation, CORS config, router registration. Runs SQLite migrations on startup (ALTER TABLE in try/except; table reconstruction for nullability changes via PRAGMA table_info). Mounts `backend/uploads/` as `/uploads` for static files (user profile photos). Starts APScheduler with two jobs: alerts job (9 AM Bogotá + on startup) and `_job_reset_gym` (every 3 minutes, resets `esta_en_gym = False` for users whose last entry exceeds `MINUTOS_SESION`).
-- `backend/models.py` — All SQLAlchemy models (13 tables): `usuarios`, `planes`, `pagos`, `wods`, `resultados_wod`, `productos`, `ventas`, `asistencias`, `movimientos_financieros`, `medidas_salud`, `marcas_rm`, `alertas_membresia`, `metodos_pago`
+- `backend/main.py` — FastAPI app creation, CORS config, router registration. Runs SQLite migrations on startup (ALTER TABLE in try/except; table reconstruction for nullability/unique-constraint changes via PRAGMA table_info / sqlite_master sql check). Mounts `backend/uploads/` as `/uploads` for static files (user profile photos). Starts APScheduler with two jobs: alerts job (9 AM Bogotá + on startup) and `_job_reset_gym` (every 3 minutes, resets `esta_en_gym = False` for users whose last entry exceeds `MINUTOS_SESION`).
+- `backend/models.py` — All SQLAlchemy models. Domain tables (all carry `gym_id`): `usuarios`, `planes`, `pagos`, `wods`, `resultados_wod`, `productos`, `ventas`, `asistencias`, `movimientos_financieros`, `medidas_salud`, `marcas_rm`, `alertas_membresia`, `metodos_pago`, `ejercicios`. Multi-tenant/SaaS tables (no `gym_id` — they define or sit above tenants): `gimnasios`, `super_admins`, `modulos`, `gimnasio_modulos`.
 - `backend/database.py` — SQLite session factory
-- `backend/security.py` — BCrypt password hashing, JWT creation/validation (HS256, 7-day expiry)
-- `backend/routers/` — One file per domain: `auth`, `usuarios`, `pagos`, `planes`, `productos`, `ventas`, `wods`, `asistencia`, `finanzas`, `salud`, `alertas`, `marcas`, `metodos_pago`
+- `backend/security.py` — BCrypt password hashing, JWT creation/validation (HS256, 7-day expiry). `get_current_user` resolves a gym-scoped `Usuario` (JWT carries `gym_id`); `get_current_superadmin` resolves a `SuperAdmin` (JWT carries `scope="superadmin"` instead) — the two token types are mutually exclusive by design.
+- `backend/modulos.py` — Feature-flag helpers: `gimnasio_tiene_modulo(db, gym_id, clave)` for manual checks, `require_modulo(clave)` as a FastAPI dependency. See "Multi-tenant (SaaS)" below.
+- `backend/routers/` — One file per domain: `auth`, `usuarios`, `pagos`, `planes`, `productos`, `ventas`, `wods`, `asistencia`, `finanzas`, `salud`, `alertas`, `marcas`, `metodos_pago`, `ejercicios`, `superadmin`
 - `backend/schemas/` — Pydantic request/response models; one file per domain except `planes` (schemas defined inline in router): `asistencia`, `alerta`, `finanza`, `pago`, `producto`, `venta`, `wod`, `usuario`, `salud`, `marcas`
-- `backend/seed.py` — Creates default plans and admin user (runs on app startup via `main.py`)
+- `backend/seed.py` — Creates default plans, the gym-1 admin user, the módulos catalog (+ activates them for gym 1), and an optional SuperAdmin (runs on app startup via `main.py`)
 
 **Frontend layout:**
 - `frontend/src/main.js` — Vue app init; Axios interceptor adds `Authorization: Bearer {token}` from `localStorage`
@@ -85,7 +88,8 @@ There are no test commands — no test suite exists in this project.
 **Auth flow:** POST `/login` returns a JWT → stored in `localStorage.token` → injected via Axios interceptor → backend validates via `get_current_user()` dependency → user role checked per-route.
 
 **Role-based access:**
-- Roles: `admin`, `coach`, `cliente`, `pendiente` (enum `RolUsuario` in `models.py`)
+- Roles: `admin`, `coach`, `cliente`, `pendiente` (enum `RolUsuario` in `models.py`) — these are roles **within a gym**, scoped by `gym_id`
+- `SuperAdmin` is a separate model/table, not a `RolUsuario` value — it has no `gym_id` and manages gimnasios/módulos across the whole platform (see "Multi-tenant (SaaS)" below)
 - Backend: route-level `Depends(_require_admin_or_coach)` or `Depends(_require_admin)` pattern in each router
 - Frontend: `meta.roles` on routes + `useAuth` composable in components
 - `pendiente` users are redirected to `/planes` by the router guard
@@ -94,7 +98,7 @@ There are no test commands — no test suite exists in this project.
 
 **Pago model:** `plan_id` is nullable. Personalizado payments have `plan_id = NULL` and `duracion_dias` set to the days purchased. The historial endpoint shows them as `"Personalizado (N días)"`.
 
-**Email/document normalization:** All routes that write or look up `usuarios.email` apply `.strip().lower()` (login, registro, POST/PATCH usuarios, JWT subject in `get_current_user`). `documento_identidad` is `.strip()`-ed. The model has `unique=True` on both columns, but case normalization happens in code so `Foo@x.com` and `foo@x.com` are treated as the same account.
+**Email/document normalization:** All routes that write or look up `usuarios.email` apply `.strip().lower()` (login, registro, POST/PATCH usuarios, JWT subject in `get_current_user`). `documento_identidad` is `.strip()`-ed. The model has `UniqueConstraint(gym_id, email)` / `UniqueConstraint(gym_id, documento_identidad)` (per-gym, not global — see "Multi-tenant (SaaS)"), and case normalization happens in code so `Foo@x.com` and `foo@x.com` are treated as the same account within a gym.
 
 **Fingerprint integration:** see the dedicated section below.
 
@@ -105,6 +109,25 @@ There are no test commands — no test suite exists in this project.
 **Unit normalization (1RM):** All weight comparisons (PR detection, chart, esPR preview) are done in kg using `1 kg = 2.20462 lbs`. Values are converted back to the display unit (`ultimaUnidad`) only for rendering. Never compare `rm_calculado` values from different records without normalizing first.
 
 **Public registration:** `POST /registro` accepts `multipart/form-data` (not JSON) because it supports an optional profile photo. Use `Form(...)` for all text fields and `File(None)` for the photo. The frontend sends a `FormData` object with `Content-Type: multipart/form-data`.
+
+## Multi-tenant (SaaS)
+
+Full plan, phase-by-phase status, and pending work: see `MULTI_TENANT.md` at the repo root. Summary of what exists today:
+
+**Tenant isolation:** every domain table carries a `gym_id` (FK to `gimnasios.id`, `NOT NULL`). `usuarios.email`/`documento_identidad` and `ejercicios.nombre` are unique **per gym** (`UniqueConstraint(gym_id, ...)`), not globally — two different gimnasios can have a client with the same email or an exercise with the same name. Every router query (list/get/update/delete), not just creation, filters by `current_user.gym_id`. New routers or endpoints **must** follow this pattern or they leak data across tenants.
+
+**Auth tokens carry tenant context:** the user JWT (`security.py: create_access_token`) includes `gym_id` alongside `sub` (email); `get_current_user` filters `Usuario` by `email + gym_id`, not email alone. A `SuperAdmin` JWT carries `scope="superadmin"` instead of `gym_id` and is validated by the separate `get_current_superadmin` dependency — the two are mutually exclusive, so a gym admin's token can never pass as a superadmin token or vice versa.
+
+**Known gap:** `POST /login` still resolves the user by email only (first match), with no client-supplied tenant hint (no subdomain, no gym selector). This is fine while no two gimnasios share a duplicate email, but must be solved (gym selector, subdomain routing, etc.) before onboarding a second real gimnasio with overlapping users. See `MULTI_TENANT.md` → "Próximos pasos".
+
+**Feature flags (módulos):** `Modulo` (catalog: `wods`, `biometria`) + `GimnasioModulo` (per-gym activation, with optional `fecha_expiracion`). Use `backend/modulos.py`:
+- `require_modulo(clave)` as a FastAPI dependency for JWT-authenticated endpoints (raises 403 if the gym's module isn't active) — see `wods.py` (whole router gated) for the simple case.
+- `gimnasio_tiene_modulo(db, gym_id, clave)` for manual checks in endpoints that mix JWT and `X-Bridge-Secret` auth (no reliable `current_user`) — see `asistencia.py` and the huella endpoints in `usuarios.py`.
+Adding a new optional feature = add a row to `MODULOS_DEFAULT` in `seed.py`, gate the relevant router/endpoints, and (pending) surface it in the frontend sidebar via `GET /me`.
+
+**SuperAdmin:** separate model (`models.py: SuperAdmin`), not a `RolUsuario`. Manages gimnasios and their módulos via `backend/routers/superadmin.py` (`/superadmin/login`, `/superadmin/gimnasios`, `/superadmin/gimnasios/{id}/modulos/{modulo_id}`). Bootstrapped optionally via `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` env vars in `seed.py: seed_superadmin()` — single-tenant installs that don't need a SuperAdmin panel can leave these unset.
+
+**Pending (not yet built):** frontend SuperAdmin panel, frontend module-aware sidebar/route guards, gym selector at login, and bridge .NET multi-gym support (`JSB_GYM_ID` — today the bridge has no tenant context, so `GET /usuarios/con-template/lista` via `X-Bridge-Secret` returns fingerprint templates across **all** gimnasios). Full detail in `MULTI_TENANT.md`.
 
 ## HomeView — client/coach home screen
 
@@ -600,6 +623,13 @@ Opcionales (producción):
 ```
 DATABASE_URL=           # Postgres; si falta, usa SQLite local (sqlite:///crossfit.db)
 CORS_ORIGINS=           # Coma-separado; si falta, usa los puertos de Vite local
+```
+
+Opcionales (panel SuperAdmin — ver "Multi-tenant (SaaS)" arriba). Si no se definen, `seed_superadmin()` no crea ningún SuperAdmin y `/superadmin/login` simplemente no tiene con qué autenticar:
+```
+SUPERADMIN_EMAIL=
+SUPERADMIN_PASSWORD=
+SUPERADMIN_NOMBRE=      # opcional, default "SuperAdmin"
 ```
 
 `SECRET_KEY` se lee con `os.environ["SECRET_KEY"]` en `security.py` (revienta si falta — siempre debe estar seteada en el host).
