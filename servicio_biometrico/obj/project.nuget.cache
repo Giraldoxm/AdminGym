@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "bPFW7zKwS/g=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\jhone\\OneDrive\\Desktop\\Study\\Proyectos\\JainSportBox\\servicio_biometrico\\HuelleroBridge.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\jhone\\.nuget\\packages\\fleck\\1.2.0\\fleck.1.2.0.nupkg.sha512",
+    "C:\\Users\\jhone\\.nuget\\packages\\microsoft.netframework.referenceassemblies\\1.0.3\\microsoft.netframework.referenceassemblies.1.0.3.nupkg.sha512",
+    "C:\\Users\\jhone\\.nuget\\packages\\microsoft.netframework.referenceassemblies.net48\\1.0.3\\microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg.sha512"
+  ],
+  "logs": []
+}

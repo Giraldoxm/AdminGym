@@ -1,0 +1,9 @@
+# Mantener el contexto de build chico y excluir lo que no es del backend.
+venv/
+.venv/
+frontend/
+servicio_biometrico/
+**/__pycache__/
+*.db
+.git/
+node_modules/

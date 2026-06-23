@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -8,7 +8,7 @@ class PagoCreate(BaseModel):
     usuario_id: int
     plan_id: int
     monto: float = Field(..., gt=0)
-    metodo_pago: Optional[str] = None
+    metodo_pago: Literal['efectivo', 'transferencia']
 
 
 class PagoResponse(BaseModel):

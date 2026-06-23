@@ -1,0 +1,17 @@
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.csproj.AssemblyReference.cache
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.AssemblyInfoInputs.cache
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.AssemblyInfo.cs
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.csproj.CoreCompileInputs.cache
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.sourcelink.json
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\HuelleroBridge.exe.config
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\HuelleroBridge.exe
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\HuelleroBridge.pdb
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\Fleck.dll
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\DPFPDevNET.dll
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\DPFPEngNET.dll
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\DPFPShrNET.dll
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\Huellero.2BF198E6.Up2Date
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.exe
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\obj\Debug\net48\HuelleroBridge.pdb
+C:\Users\jhone\OneDrive\Desktop\Study\Proyectos\JainSportBox\servicio_biometrico\bin\Debug\net48\DPFPVerNET.dll

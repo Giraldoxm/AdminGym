@@ -28,5 +28,6 @@ class ProductoResponse(BaseModel):
     stock: int
     categoria: Optional[str]
     activo: bool
+    foto_url: Optional[str] = None
 
     model_config = {"from_attributes": True}

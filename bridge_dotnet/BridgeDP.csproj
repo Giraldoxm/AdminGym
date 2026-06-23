@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BridgeDP</RootNamespace>
+    <AssemblyName>BridgeDP</AssemblyName>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    DPUruNet.dll viene del U.are.U .NET SDK de DigitalPersona.
+    Copia el archivo a bridge_dotnet/lib/DPUruNet.dll antes de compilar.
+    Ruta típica del SDK:
+      C:\Program Files\DigitalPersona\U.are.U SDK\Windows\Lib\DotNet\DPUruNet.dll
+  -->
+  <ItemGroup>
+    <Reference Include="DPUruNet">
+      <HintPath>lib\DPUruNet.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Las otras DLLs del SDK (.NET COM-interop libs) tienen que estar
+       junto al .exe en runtime; las copiamos como contenido. -->
+  <ItemGroup>
+    <None Include="lib\DPCtlUruNet.dll" Condition="Exists('lib\DPCtlUruNet.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>DPCtlUruNet.dll</Link>
+    </None>
+    <None Include="lib\DPXUru.dll" Condition="Exists('lib\DPXUru.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>DPXUru.dll</Link>
+    </None>
+    <None Include="lib\DPCtlXUru.dll" Condition="Exists('lib\DPCtlXUru.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>DPCtlXUru.dll</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

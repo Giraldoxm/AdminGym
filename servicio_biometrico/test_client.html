@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Huellero WS Test</title>
+  <style>
+    body { font-family: monospace; background:#0b0f14; color:#e6edf3; padding:20px; }
+    #log { white-space: pre-wrap; word-break: break-all; background:#11171f; padding:12px; border-radius:8px; height:70vh; overflow:auto; }
+    .ok{color:#3fb950}.err{color:#f85149}.info{color:#58a6ff}.b64{color:#d2a8ff}
+  </style>
+</head>
+<body>
+  <h2>Huellero Bridge — Cliente de prueba</h2>
+  <div>Estado: <span id="estado">desconectado</span></div>
+  <div id="log"></div>
+  <script>
+    const log = document.getElementById('log');
+    const estado = document.getElementById('estado');
+    function add(msg, cls) {
+      const t = new Date().toLocaleTimeString();
+      log.innerHTML += `<div class="${cls||''}">[${t}] ${msg}</div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+    const ws = new WebSocket('ws://localhost:8080');
+    ws.onopen = () => { estado.textContent='conectado'; add('Conectado al puente','ok'); };
+    ws.onclose = () => { estado.textContent='desconectado'; add('Desconectado','err'); };
+    ws.onerror = (e) => add('Error de WS','err');
+    ws.onmessage = (ev) => {
+      add('Mensaje recibido:', 'info');
+      try {
+        const m = JSON.parse(ev.data);
+        add(`tipo=${m.tipo}  reader=${m.reader}`, 'info');
+        add(`base64 (${m.data.length} chars): ${m.data}`, 'b64');
+      } catch { add(ev.data); }
+    };
+  </script>
+</body>
+</html>

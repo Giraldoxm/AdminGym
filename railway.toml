@@ -1,0 +1,11 @@
+# Despliegue del backend en Railway (Capa 3).
+# Builder Dockerfile explícito: el repo es mixto (Python + .NET en
+# servicio_biometrico/) y la autodetección de nixpacks intentaba `dotnet restore`.
+# El Dockerfile de la raíz construye solo el backend FastAPI.
+
+[build]
+builder = "dockerfile"
+
+[deploy]
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

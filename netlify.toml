@@ -1,0 +1,15 @@
+# Despliegue del frontend en Netlify (alternativa a Vercel).
+# El frontend vive en el subdirectorio frontend/.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  # publish es relativo a base (frontend/), así que solo "dist".
+  publish = "dist"
+
+# Rewrite SPA: todas las rutas → index.html para que el router de Vue
+# no rompa al recargar una URL profunda.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
