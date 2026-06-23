@@ -25,15 +25,16 @@ def registrar_pago(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id == payload.usuario_id).first()
+    usuario = db.query(Usuario).filter(Usuario.id == payload.usuario_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
-    plan = db.query(Plan).filter(Plan.id == payload.plan_id, Plan.activo == True).first()
+    plan = db.query(Plan).filter(Plan.id == payload.plan_id, Plan.activo == True, Plan.gym_id == current_user.gym_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado o inactivo.")
 
     pago = Pago(
+        gym_id=current_user.gym_id,
         usuario_id=payload.usuario_id,
         plan_id=payload.plan_id,
         monto=payload.monto,
@@ -77,7 +78,7 @@ def registrar_pago_directo(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id == payload.usuario_id).first()
+    usuario = db.query(Usuario).filter(Usuario.id == payload.usuario_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
@@ -91,6 +92,7 @@ def registrar_pago_directo(
     usuario.fecha_vencimiento = nueva_fecha
 
     pago = Pago(
+        gym_id=current_user.gym_id,
         usuario_id=payload.usuario_id,
         plan_id=None,
         duracion_dias=payload.duracion_dias,
@@ -123,7 +125,7 @@ def editar_pago(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    pago = db.query(Pago).filter(Pago.id == pago_id).first()
+    pago = db.query(Pago).filter(Pago.id == pago_id, Pago.gym_id == current_user.gym_id).first()
     if not pago:
         raise HTTPException(status_code=404, detail="Pago no encontrado.")
 
@@ -153,7 +155,7 @@ def anular_pago(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    pago = db.query(Pago).filter(Pago.id == pago_id).first()
+    pago = db.query(Pago).filter(Pago.id == pago_id, Pago.gym_id == current_user.gym_id).first()
     if not pago:
         raise HTTPException(status_code=404, detail="Pago no encontrado.")
 
@@ -177,7 +179,7 @@ def historial_pagos(
 ):
     pagos = (
         db.query(Pago)
-        .filter(Pago.usuario_id == usuario_id)
+        .filter(Pago.usuario_id == usuario_id, Pago.gym_id == current_user.gym_id)
         .order_by(Pago.fecha_pago.desc())
         .all()
     )

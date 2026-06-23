@@ -23,7 +23,7 @@ def listar_ejercicios(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    q = db.query(Ejercicio)
+    q = db.query(Ejercicio).filter(Ejercicio.gym_id == current_user.gym_id)
     if categoria:
         q = q.filter(Ejercicio.categoria == categoria)
     return q.order_by(Ejercicio.nombre.asc()).all()
@@ -35,10 +35,13 @@ def crear_ejercicio(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    existe = db.query(Ejercicio).filter(Ejercicio.nombre.ilike(payload.nombre.strip())).first()
+    existe = db.query(Ejercicio).filter(
+        Ejercicio.nombre.ilike(payload.nombre.strip()), Ejercicio.gym_id == current_user.gym_id
+    ).first()
     if existe:
         raise HTTPException(status_code=409, detail="Ya existe un ejercicio con ese nombre.")
     ej = Ejercicio(
+        gym_id=current_user.gym_id,
         nombre=payload.nombre.strip(),
         video_url=(payload.video_url or None),
         descripcion=(payload.descripcion or None),
@@ -57,7 +60,7 @@ def actualizar_ejercicio(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    ej = db.query(Ejercicio).filter(Ejercicio.id == ejercicio_id).first()
+    ej = db.query(Ejercicio).filter(Ejercicio.id == ejercicio_id, Ejercicio.gym_id == current_user.gym_id).first()
     if not ej:
         raise HTTPException(status_code=404, detail="Ejercicio no encontrado.")
     data = payload.model_dump(exclude_unset=True)
@@ -65,7 +68,7 @@ def actualizar_ejercicio(
         nuevo = data["nombre"].strip()
         conflicto = (
             db.query(Ejercicio)
-            .filter(Ejercicio.nombre.ilike(nuevo), Ejercicio.id != ejercicio_id)
+            .filter(Ejercicio.nombre.ilike(nuevo), Ejercicio.gym_id == current_user.gym_id, Ejercicio.id != ejercicio_id)
             .first()
         )
         if conflicto:
@@ -88,7 +91,7 @@ def eliminar_ejercicio(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    ej = db.query(Ejercicio).filter(Ejercicio.id == ejercicio_id).first()
+    ej = db.query(Ejercicio).filter(Ejercicio.id == ejercicio_id, Ejercicio.gym_id == current_user.gym_id).first()
     if not ej:
         raise HTTPException(status_code=404, detail="Ejercicio no encontrado.")
     en_uso = db.query(WODEjercicio).filter(WODEjercicio.ejercicio_id == ejercicio_id).first()

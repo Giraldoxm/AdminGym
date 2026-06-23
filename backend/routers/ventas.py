@@ -18,7 +18,7 @@ def registrar_venta(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    producto = db.query(Producto).filter(Producto.id == payload.producto_id).first()
+    producto = db.query(Producto).filter(Producto.id == payload.producto_id, Producto.gym_id == current_user.gym_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
     if not producto.activo:
@@ -28,11 +28,12 @@ def registrar_venta(
             status_code=400,
             detail=f"Stock insuficiente. Disponible: {producto.stock}, solicitado: {payload.cantidad}.",
         )
-    if payload.usuario_id and not db.query(Usuario).filter(Usuario.id == payload.usuario_id).first():
+    if payload.usuario_id and not db.query(Usuario).filter(Usuario.id == payload.usuario_id, Usuario.gym_id == current_user.gym_id).first():
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
     total = producto.precio * payload.cantidad
     venta = Venta(
+        gym_id=current_user.gym_id,
         producto_id=payload.producto_id,
         usuario_id=payload.usuario_id,
         cantidad=payload.cantidad,
@@ -44,6 +45,7 @@ def registrar_venta(
     producto.stock -= payload.cantidad
 
     mov = MovimientoFinanciero(
+        gym_id=current_user.gym_id,
         tipo=TipoMovimiento.INGRESO,
         concepto=f"Venta tienda – {producto.nombre} ×{payload.cantidad}",
         categoria="venta_tienda",
@@ -62,5 +64,5 @@ def registrar_venta(
 
 
 @router.get("/", response_model=List[VentaResponse])
-def listar_ventas(db: Session = Depends(get_db)):
-    return db.query(Venta).order_by(Venta.fecha_venta.desc()).all()
+def listar_ventas(db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
+    return db.query(Venta).filter(Venta.gym_id == current_user.gym_id).order_by(Venta.fecha_venta.desc()).all()

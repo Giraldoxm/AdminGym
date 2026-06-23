@@ -29,7 +29,7 @@ def listar_productos(
     # Clientes solo ven activos, admin/coach pueden ver todos
     if current_user.rol == RolUsuario.CLIENTE:
         solo_activos = True
-    q = db.query(Producto)
+    q = db.query(Producto).filter(Producto.gym_id == current_user.gym_id)
     if solo_activos:
         q = q.filter(Producto.activo == True)
     return q.order_by(Producto.nombre).all()
@@ -41,7 +41,7 @@ def obtener_producto(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    producto = db.query(Producto).filter(Producto.id == producto_id, Producto.gym_id == current_user.gym_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
     return producto
@@ -53,7 +53,7 @@ def crear_producto(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    nuevo = Producto(**payload.model_dump())
+    nuevo = Producto(**payload.model_dump(), gym_id=current_user.gym_id)
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
@@ -67,7 +67,7 @@ def editar_producto(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    producto = db.query(Producto).filter(Producto.id == producto_id, Producto.gym_id == current_user.gym_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
     for campo, valor in payload.model_dump(exclude_unset=True).items():
@@ -86,7 +86,7 @@ def subir_foto(
 ):
     if foto.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail="Formato no permitido. Usa JPG, PNG o WEBP.")
-    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    producto = db.query(Producto).filter(Producto.id == producto_id, Producto.gym_id == current_user.gym_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
 
@@ -105,7 +105,7 @@ def eliminar_producto(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
 ):
-    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    producto = db.query(Producto).filter(Producto.id == producto_id, Producto.gym_id == current_user.gym_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
     # Soft delete para preservar historial de ventas

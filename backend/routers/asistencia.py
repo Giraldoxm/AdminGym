@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 from datetime import date, datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import Asistencia, RolUsuario, Usuario
+from modulos import gimnasio_tiene_modulo, require_modulo
 from schemas.asistencia import (
     AsistenciaCreate, AsistenciaResponse,
     AsistenteBloqueItem, BloqueHorario, SesionesPorBloqueResponse,
@@ -23,11 +25,13 @@ def _require_admin_or_coach(current_user: Usuario = Depends(get_current_user)):
     return current_user
 
 
-def _autorizar_bridge_o_admin(request: Request, db: Session) -> None:
+def _autorizar_bridge_o_admin(request: Request, db: Session) -> Optional[Usuario]:
+    """Devuelve el Usuario que llama si vino con JWT admin/coach, o None si vino
+    autenticado con el X-Bridge-Secret del bridge .NET (sin contexto de gym propio)."""
     bridge_secret = os.environ.get("BRIDGE_SECRET", "")
     x_secret = request.headers.get("X-Bridge-Secret", "")
     if bridge_secret and x_secret == bridge_secret:
-        return
+        return None
     from jose import jwt as jose_jwt
     from security import ALGORITHM, SECRET_KEY
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
@@ -36,11 +40,13 @@ def _autorizar_bridge_o_admin(request: Request, db: Session) -> None:
     try:
         payload_jwt = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload_jwt.get("sub")
+        gym_id = payload_jwt.get("gym_id")
     except Exception:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    caller = db.query(Usuario).filter(Usuario.email == email).first()
+    caller = db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == gym_id).first()
     if not caller or caller.rol not in (RolUsuario.ADMIN, RolUsuario.COACH):
         raise HTTPException(status_code=403, detail="Sin permisos.")
+    return caller
 
 
 MINUTOS_SESION = 65  # tiempo máximo de una sesión; usado por el job de reset en main.py
@@ -50,7 +56,7 @@ def _registrar(usuario: Usuario, db: Session) -> AsistenciaResponse:
     # La palanquera solo controla la ENTRADA. No se registran salidas:
     # cada marcación de huella es una entrada y enciende esta_en_gym.
     # El flag vuelve a False solo por tiempo (job _job_reset_gym en main.py).
-    asistencia = Asistencia(usuario_id=usuario.id, tipo="entrada")
+    asistencia = Asistencia(gym_id=usuario.gym_id, usuario_id=usuario.id, tipo="entrada")
     db.add(asistencia)
     usuario.esta_en_gym = True
     db.commit()
@@ -69,6 +75,8 @@ def registrar_asistencia(payload: AsistenciaCreate, db: Session = Depends(get_db
     usuario = db.query(Usuario).filter(Usuario.huella_id == payload.huella_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado con esa huella.")
+    if not gimnasio_tiene_modulo(db, usuario.gym_id, "biometria"):
+        raise HTTPException(status_code=403, detail="El módulo de biometría no está activo para este gimnasio.")
     return _registrar(usuario, db)
 
 
@@ -79,10 +87,14 @@ def registrar_asistencia_por_id(usuario_id: int, request: Request, db: Session =
     Usado por el bridge DigitalPersona (X-Bridge-Secret) o por admin/coach (JWT).
     Valida que la membresía esté vigente antes de permitir el acceso.
     """
-    _autorizar_bridge_o_admin(request, db)
+    caller = _autorizar_bridge_o_admin(request, db)
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    if caller is not None and caller.gym_id != usuario.gym_id:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    if not gimnasio_tiene_modulo(db, usuario.gym_id, "biometria"):
+        raise HTTPException(status_code=403, detail="El módulo de biometría no está activo para este gimnasio.")
 
     # Toda marcación es una entrada → siempre se valida la membresía.
     if not usuario.fecha_vencimiento or usuario.fecha_vencimiento < date.today():
@@ -98,7 +110,7 @@ def registrar_asistencia_por_id(usuario_id: int, request: Request, db: Session =
 def mi_historial(
     meses: int = Query(4, ge=1, le=12),
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_modulo("biometria")),
 ):
     hoy = date.today()
     mes = hoy.month
@@ -116,6 +128,7 @@ def mi_historial(
             Asistencia.usuario_id == current_user.id,
             Asistencia.tipo == "entrada",
             Asistencia.fecha_hora >= desde,
+            Asistencia.gym_id == current_user.gym_id,
         )
         .order_by(Asistencia.fecha_hora)
         .all()
@@ -131,8 +144,9 @@ def historial_usuario(
     meses: int = Query(12, ge=1, le=24),
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
+    _modulo: Usuario = Depends(require_modulo("biometria")),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id, Usuario.gym_id == current_user.gym_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
@@ -152,6 +166,7 @@ def historial_usuario(
             Asistencia.usuario_id == usuario_id,
             Asistencia.tipo == "entrada",
             Asistencia.fecha_hora >= desde,
+            Asistencia.gym_id == current_user.gym_id,
         )
         .order_by(Asistencia.fecha_hora)
         .all()
@@ -165,9 +180,10 @@ def historial_usuario(
 def usuarios_en_gym(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
+    _modulo: Usuario = Depends(require_modulo("biometria")),
 ):
     """Usuarios con esta_en_gym=True, con su última entrada y tiempo restante de sesión."""
-    usuarios = db.query(Usuario).filter(Usuario.esta_en_gym == True).all()
+    usuarios = db.query(Usuario).filter(Usuario.esta_en_gym == True, Usuario.gym_id == current_user.gym_id).all()
     ahora = datetime.utcnow()
     resultado = []
     for u in usuarios:
@@ -202,6 +218,7 @@ def sesiones_por_bloque(
     hasta: date = Query(..., description="Fecha fin YYYY-MM-DD"),
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(_require_admin_or_coach),
+    _modulo: Usuario = Depends(require_modulo("biometria")),
 ):
     if desde > hasta:
         raise HTTPException(status_code=422, detail="'desde' debe ser anterior o igual a 'hasta'.")
@@ -218,6 +235,7 @@ def sesiones_por_bloque(
             Asistencia.tipo == "entrada",
             Asistencia.fecha_hora >= desde_utc,
             Asistencia.fecha_hora <= hasta_utc,
+            Asistencia.gym_id == current_user.gym_id,
         )
         .all()
     )

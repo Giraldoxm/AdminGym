@@ -48,17 +48,38 @@ class Base(DeclarativeBase):
     pass
 
 
+# ──────────────────────────── Gimnasios (tenants) ─────────────
+
+class Gimnasio(Base):
+    """Un gimnasio/box independiente dentro de la plataforma (tenant)."""
+    __tablename__ = "gimnasios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self) -> str:
+        return f"<Gimnasio {self.id} – {self.nombre} ({self.slug})>"
+
+
 # ──────────────────────────── Usuarios ────────────────────────
 
 class Usuario(Base):
     __tablename__ = "usuarios"
+    __table_args__ = (
+        UniqueConstraint("gym_id", "email", name="uq_usuario_gym_email"),
+        UniqueConstraint("gym_id", "documento_identidad", name="uq_usuario_gym_documento"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)
-    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(120), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     rol: Mapped[RolUsuario] = mapped_column(SAEnum(RolUsuario), default=RolUsuario.CLIENTE, nullable=False)
-    documento_identidad: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    documento_identidad: Mapped[str] = mapped_column(String(20), nullable=False)
     huella_id: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True)
     huella_template: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     telefono: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -87,6 +108,7 @@ class Plan(Base):
     __tablename__ = "planes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     nombre: Mapped[str] = mapped_column(String(80), nullable=False)
     precio: Mapped[float] = mapped_column(Float, nullable=False)
     duracion_dias: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -108,6 +130,7 @@ class Pago(Base):
     __tablename__ = "pagos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     usuario_id: Mapped[int] = mapped_column(Integer, ForeignKey("usuarios.id"), nullable=False)
     plan_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("planes.id"), nullable=True)
     duracion_dias: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)   # solo para pagos personalizados (plan_id NULL)
@@ -130,6 +153,7 @@ class WOD(Base):
     __tablename__ = "wods"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     titulo: Mapped[str] = mapped_column(String(150), nullable=False)
     descripcion: Mapped[str] = mapped_column(Text, nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
@@ -183,9 +207,13 @@ class ResultadoWOD(Base):
 class Ejercicio(Base):
     """Ejercicio reutilizable (nombre + video) para armar los WODs."""
     __tablename__ = "ejercicios"
+    __table_args__ = (
+        UniqueConstraint("gym_id", "nombre", name="uq_ejercicio_gym_nombre"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    nombre: Mapped[str] = mapped_column(String(150), nullable=False, unique=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(150), nullable=False)
     video_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     descripcion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     categoria: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)        # Cardio | Fuerza | Gimnasia | Olímpico | Otro
@@ -238,6 +266,7 @@ class Producto(Base):
     __tablename__ = "productos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     nombre: Mapped[str] = mapped_column(String(150), nullable=False)
     descripcion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     precio: Mapped[float] = mapped_column(Float, nullable=False)
@@ -260,6 +289,7 @@ class Venta(Base):
     __tablename__ = "ventas"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     producto_id: Mapped[int] = mapped_column(Integer, ForeignKey("productos.id"), nullable=False)
     usuario_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("usuarios.id"), nullable=True)
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -283,6 +313,7 @@ class Asistencia(Base):
     __tablename__ = "asistencias"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     usuario_id: Mapped[int] = mapped_column(Integer, ForeignKey("usuarios.id"), nullable=False)
     tipo: Mapped[str] = mapped_column(String(10), nullable=False, default="entrada")  # entrada / salida
     fecha_hora: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -301,6 +332,7 @@ class MovimientoFinanciero(Base):
     __tablename__ = "movimientos_financieros"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     tipo: Mapped[TipoMovimiento] = mapped_column(SAEnum(TipoMovimiento), nullable=False)
     concepto: Mapped[str] = mapped_column(String(200), nullable=False)
     categoria: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -329,6 +361,7 @@ class MedidaSalud(Base):
     __tablename__ = "medidas_salud"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     usuario_id: Mapped[int] = mapped_column(Integer, ForeignKey("usuarios.id"), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
     peso_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -354,6 +387,7 @@ class MarcaRM(Base):
     __tablename__ = "marcas_rm"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     usuario_id: Mapped[int] = mapped_column(Integer, ForeignKey("usuarios.id"), nullable=False)
     ejercicio: Mapped[str] = mapped_column(String(100), nullable=False)
     # peso/repeticiones/rm_calculado: aplican a barra y corporal_lastre.
@@ -389,6 +423,7 @@ class AlertaMembresia(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     usuario_id: Mapped[int] = mapped_column(Integer, ForeignKey("usuarios.id"), nullable=False)
     fecha_vencimiento: Mapped[date] = mapped_column(Date, nullable=False)
     dias_anticipacion: Mapped[int] = mapped_column(Integer, nullable=False)  # 7, 3 o 1
@@ -409,6 +444,7 @@ class MetodoPago(Base):
     __tablename__ = "metodos_pago"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
     banco: Mapped[str] = mapped_column(String(80), nullable=False)
     tipo_cuenta: Mapped[str] = mapped_column(String(40), nullable=False)  # ahorros, corriente, nequi, daviplata, etc.
     numero_cuenta: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -418,6 +454,59 @@ class MetodoPago(Base):
 
     def __repr__(self) -> str:
         return f"<MetodoPago {self.id} – {self.banco} ({self.tipo_cuenta})>"
+
+
+# ──────────────────────── SuperAdmin ───────────────────────────
+
+class SuperAdmin(Base):
+    """Operador de la plataforma SaaS. No pertenece a ningún gimnasio: gestiona
+    el alta de gimnasios y qué módulos tiene activos cada uno. Vive fuera del
+    árbol de roles de Usuario/RolUsuario a propósito (ver CLAUDE.md, Fase 3)."""
+    __tablename__ = "super_admins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self) -> str:
+        return f"<SuperAdmin {self.id} – {self.email}>"
+
+
+# ──────────────────────── Módulos (feature flags) ──────────────
+
+class Modulo(Base):
+    """Catálogo fijo de funcionalidades que se pueden activar por gimnasio."""
+    __tablename__ = "modulos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clave: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)  # "wods", "biometria", ...
+    nombre: Mapped[str] = mapped_column(String(100), nullable=False)
+    descripcion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<Modulo {self.id} – {self.clave}>"
+
+
+class GimnasioModulo(Base):
+    """Tabla puente: qué módulo tiene activo cada gimnasio."""
+    __tablename__ = "gimnasio_modulos"
+    __table_args__ = (
+        UniqueConstraint("gym_id", "modulo_id", name="uq_gimnasio_modulo"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gym_id: Mapped[int] = mapped_column(Integer, ForeignKey("gimnasios.id"), nullable=False)
+    modulo_id: Mapped[int] = mapped_column(Integer, ForeignKey("modulos.id"), nullable=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    fecha_activacion: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    fecha_expiracion: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    modulo: Mapped["Modulo"] = relationship("Modulo")
+
+    def __repr__(self) -> str:
+        return f"<GimnasioModulo gym={self.gym_id} modulo={self.modulo_id} activo={self.activo}>"
 
 
 # ──────────────────── Utilidad: crear tablas ──────────────────
