@@ -7,8 +7,17 @@ export default defineConfig(({ mode }) => {
   // al service worker, donde no hay closures ni import.meta). Se hornea el
   // origin como RegExp literal dentro del SW.
   const env = loadEnv(mode, process.cwd(), '')
-  const apiUrl = env.VITE_API_URL || 'http://127.0.0.1:8000'
-  const apiOrigin = new URL(apiUrl).origin
+  const rawApiUrl = (env.VITE_API_URL || 'http://127.0.0.1:8000').trim()
+  // Tolerante: si el valor viene sin esquema (ej. "foo.up.railway.app") se le
+  // antepone https://; si igual es inválido, cae a un default para no romper el
+  // build (el TypeError: Invalid URL tumbaba todo el deploy).
+  let apiOrigin
+  try {
+    const normalized = /^https?:\/\//i.test(rawApiUrl) ? rawApiUrl : `https://${rawApiUrl}`
+    apiOrigin = new URL(normalized).origin
+  } catch {
+    apiOrigin = 'http://127.0.0.1:8000'
+  }
   const apiOriginRe = new RegExp('^' + apiOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
 
   return {

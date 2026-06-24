@@ -2,7 +2,10 @@ import axios from 'axios'
 
 // Base del backend por entorno. Local (default): backend en 127.0.0.1:8000.
 // Producción: VITE_API_URL=https://api.tudominio.com (ver .env.production).
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+// Tolerante: si el valor viene sin esquema (ej. "foo.up.railway.app") se le
+// antepone https:// para que axios no lo tome como ruta relativa.
+const _rawBase = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').trim().replace(/\/$/, '')
+export const API_BASE = /^https?:\/\//i.test(_rawBase) ? _rawBase : `https://${_rawBase}`
 
 // Resuelve la URL de un archivo subido (foto de perfil/producto).
 // Las fotos en object storage (R2/S3) ya vienen como URL absoluta → se usan
