@@ -90,8 +90,16 @@ def seed_admin():
 
 
 MODULOS_DEFAULT = [
+    {"clave": "usuarios", "nombre": "Usuarios", "descripcion": "Gestión de miembros del gimnasio (alta, edición, membresías)."},
+    {"clave": "finanzas", "nombre": "Finanzas", "descripcion": "Ingresos, movimientos financieros y reportes."},
+    {"clave": "tienda", "nombre": "Tienda", "descripcion": "Catálogo de productos y registro de ventas."},
     {"clave": "wods", "nombre": "WODs y puntuación", "descripcion": "Registro y puntuación de WODs (regulares y personalizados)."},
-    {"clave": "biometria", "nombre": "Biometría (huella)", "descripcion": "Integración con el lector de huellas U.are.U 4500 para control de acceso."},
+    {"clave": "biometria", "nombre": "Huella / Huellero", "descripcion": "Lector de huellas U.are.U 4500: enrolamiento, búsqueda por huella y control de acceso (palanquera)."},
+    {"clave": "salud", "nombre": "Mi Salud", "descripcion": "Medidas de salud y composición corporal de cada miembro."},
+    {"clave": "marcas", "nombre": "Mis Marcas (1RM)", "descripcion": "Records personales y cálculo de 1RM por ejercicio."},
+    {"clave": "sesiones", "nombre": "Sesiones / Asistencia", "descripcion": "Consulta de asistencias por bloque horario y quién está en el box."},
+    {"clave": "alertas", "nombre": "Alertas WhatsApp", "descripcion": "Recordatorios de vencimiento de membresía vía WhatsApp."},
+    {"clave": "ejercicios", "nombre": "Ejercicios", "descripcion": "Catálogo de ejercicios del gimnasio (usado al armar WODs)."},
 ]
 
 
@@ -109,6 +117,11 @@ def seed_modulos():
                 db.add(modulo)
                 db.flush()
                 print(f"  + Módulo '{datos['clave']}' creado")
+            elif modulo.nombre != datos["nombre"] or modulo.descripcion != datos["descripcion"]:
+                # Mantener nombre/descripción del catálogo al día (idempotente).
+                modulo.nombre = datos["nombre"]
+                modulo.descripcion = datos["descripcion"]
+                print(f"  · Módulo '{datos['clave']}' actualizado")
 
             activacion = db.query(GimnasioModulo).filter(
                 GimnasioModulo.gym_id == DEFAULT_GYM_ID,

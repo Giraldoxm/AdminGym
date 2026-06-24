@@ -7,18 +7,26 @@
         <p class="text-gray-500 mt-1">Gestiona los usuarios y sus membresías</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button @click="abrirPalanquera" :disabled="palanqueraAbriendo" class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-4 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 transform active:scale-95">
+        <button v-if="tieneBiometria" @click="abrirPalanquera" :disabled="palanqueraAbriendo" class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-4 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 transform active:scale-95">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M5 9V7a5 5 0 019.9-1 1 1 0 11-1.98.32A3 3 0 007 7v2h6a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm5 3a1 1 0 00-1 1v2a1 1 0 102 0v-2a1 1 0 00-1-1z" clip-rule="evenodd" />
           </svg>
           {{ palanqueraAbriendo ? 'Abriendo…' : 'Abrir palanquera' }}
         </button>
-        <button @click="abrirBuscarHuella" class="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 transform active:scale-95">
+        <button v-if="tieneBiometria" @click="abrirBuscarHuella" class="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 transform active:scale-95">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M6.625 2.655A9 9 0 0119 11a1 1 0 11-2 0 7 7 0 00-9.625-6.492 1 1 0 11-.75-1.853zM4.662 4.959A1 1 0 014.75 6.37 6.97 6.97 0 003 11a1 1 0 11-2 0 8.97 8.97 0 012.25-5.953 1 1 0 011.412-.088z" clip-rule="evenodd"/>
             <path fill-rule="evenodd" d="M5 11a5 5 0 1110 0 1 1 0 11-2 0 3 3 0 10-6 0c0 1.677-.345 3.276-.968 4.729a1 1 0 11-1.838-.789A9.964 9.964 0 005 11z" clip-rule="evenodd"/>
           </svg>
           Buscar por Huella
+        </button>
+        <button v-if="linkRegistro" @click="copiarLinkRegistro"
+          class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-lg shadow-sm hover:shadow transition-all font-semibold flex items-center gap-2 transform active:scale-95"
+          :title="linkRegistro">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 11-5.656-5.656l1.5-1.5m6.656-.328a4 4 0 010-5.656l3-3a4 4 0 115.656 5.656l-1.5 1.5" />
+          </svg>
+          {{ linkCopiado ? '¡Copiado!' : 'Link de registro' }}
         </button>
         <button @click="showForm = true" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 transform active:scale-95">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -387,7 +395,7 @@
               </span>
               <p v-else class="text-sm text-gray-400 italic">—</p>
             </div>
-            <div class="bg-gray-50 rounded-xl p-4">
+            <div v-if="tieneBiometria" class="bg-gray-50 rounded-xl p-4">
               <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-1">Huella Digital</p>
               <div class="flex items-center justify-between gap-2">
                 <p class="text-sm font-semibold" :class="usuarioSeleccionado.huella_id ? 'text-emerald-700' : 'text-gray-400'">
@@ -978,9 +986,32 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api, { mediaUrl } from '../api'
+import { useModulos } from '../composables/useModulos'
 
 const router = useRouter()
+const { tieneBiometria } = useModulos()
 const BRIDGE_URL = 'http://localhost:8001'
+
+// Link de registro propio del gimnasio (para compartir con clientes nuevos).
+const linkRegistro = computed(() => {
+  const slug = localStorage.getItem('gymSlug')
+  return slug ? `${window.location.origin}/registro?gym=${slug}` : ''
+})
+const linkCopiado = ref(false)
+async function copiarLinkRegistro() {
+  if (!linkRegistro.value) return
+  try {
+    await navigator.clipboard.writeText(linkRegistro.value)
+  } catch {
+    // Fallback para contextos sin clipboard API (http no seguro)
+    const ta = document.createElement('textarea')
+    ta.value = linkRegistro.value
+    document.body.appendChild(ta); ta.select()
+    document.execCommand('copy'); document.body.removeChild(ta)
+  }
+  linkCopiado.value = true
+  setTimeout(() => { linkCopiado.value = false }, 2000)
+}
 const ENROL_STEPS = 4
 
 // ── En gym ───────────────────────────────────────────────────

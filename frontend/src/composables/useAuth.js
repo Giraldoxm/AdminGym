@@ -9,6 +9,15 @@ export function setFechaVencimiento(fecha) {
   localStorage.setItem('fechaVencimiento', fecha || '')
 }
 
+// Nombre del gimnasio del usuario (multi-tenant): se muestra dentro de la app
+// (sidebar, home, mensajes), mientras que el /login usa el nombre de la plataforma.
+const gymNombreRef = ref(localStorage.getItem('gymNombre') || '')
+
+export function setGymNombre(nombre) {
+  gymNombreRef.value = nombre || ''
+  localStorage.setItem('gymNombre', nombre || '')
+}
+
 export function membresiaVencidaFor(fecha) {
   if (!fecha) return true
   const hoy = new Date()
@@ -20,6 +29,7 @@ export function membresiaVencidaFor(fecha) {
 export function useAuth() {
   const rol = computed(() => localStorage.getItem('userRol') || 'cliente')
   const nombre = computed(() => localStorage.getItem('userName') || '')
+  const gymNombre = computed(() => gymNombreRef.value || 'AdminGym')
 
   const isAdmin = computed(() => rol.value === 'admin')
   const isCoach = computed(() => rol.value === 'coach')
@@ -32,5 +42,5 @@ export function useAuth() {
     isCliente.value && membresiaVencidaFor(fechaVencimientoRef.value)
   )
 
-  return { rol, nombre, isAdmin, isCoach, isCliente, isPendiente, canManage, membresiaVencida }
+  return { rol, nombre, gymNombre, isAdmin, isCoach, isCliente, isPendiente, canManage, membresiaVencida }
 }

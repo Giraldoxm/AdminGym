@@ -116,7 +116,7 @@
         <div>
           <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Rol</p>
           <p class="text-2xl font-black">Coach</p>
-          <p class="text-sm text-gray-400 mt-0.5">Jain Sport Box</p>
+          <p class="text-sm text-gray-400 mt-0.5">{{ gymNombre }}</p>
         </div>
       </div>
     </template>
@@ -210,7 +210,7 @@ import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import { useAuth } from '../composables/useAuth'
 
-const { nombre, isCliente, isCoach } = useAuth()
+const { nombre, gymNombre, isCliente, isCoach } = useAuth()
 
 const userData = ref({})
 const fechasAsistencia = ref([])

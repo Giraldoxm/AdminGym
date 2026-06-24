@@ -78,7 +78,7 @@
             <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-1">Miembro desde</p>
             <p class="text-sm font-semibold text-gray-800">{{ formatFechaCorta(usuario.created_at) }}</p>
           </div>
-          <div class="bg-gray-50 rounded-xl p-3 flex items-center justify-between gap-2">
+          <div v-if="tieneBiometria" class="bg-gray-50 rounded-xl p-3 flex items-center justify-between gap-2">
             <div>
               <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-1">Huella digital</p>
               <p class="text-sm font-semibold" :class="usuario.huella_id ? 'text-emerald-700' : 'text-gray-400'">
@@ -598,7 +598,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api, { mediaUrl } from '../api'
+import { useModulos } from '../composables/useModulos'
 
+const { tieneBiometria } = useModulos()
 const route = useRoute()
 const id = route.params.id
 

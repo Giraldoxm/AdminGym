@@ -25,4 +25,30 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Sesión inválida (token expirado o gimnasio desactivado por el SuperAdmin) → el
+// backend responde 401 en get_current_user. Cerramos sesión y volvemos al login.
+// OJO: solo 401. Los 403 (módulo no contratado vía require_modulo) NO deben
+// cerrar la sesión — el usuario sigue logueado, solo no tiene ese módulo.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status
+    const url = error.config?.url || ''
+    const enLogin = url.includes('/login')
+    if (status === 401 && localStorage.getItem('token') && !enLogin) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('userRol')
+      localStorage.removeItem('userName')
+      localStorage.removeItem('fechaVencimiento')
+      localStorage.removeItem('tieneWodsPersonalizados')
+      localStorage.removeItem('userGenero')
+      localStorage.removeItem('modulosActivos')
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
 export default api

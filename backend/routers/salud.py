@@ -7,8 +7,9 @@ from database import get_db
 from models import MedidaSalud, Usuario
 from schemas.salud import MedidaPorTipoCreate, MedidaResponse
 from security import get_current_user
+from modulos import require_modulo
 
-router = APIRouter(prefix="/salud", tags=["Salud"])
+router = APIRouter(prefix="/salud", tags=["Salud"], dependencies=[Depends(require_modulo("salud"))])
 
 CAMPOS = {
     "peso":    "peso_kg",

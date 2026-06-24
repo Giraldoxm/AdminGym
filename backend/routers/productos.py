@@ -8,10 +8,11 @@ from models import Producto, RolUsuario, Usuario
 from schemas.producto import ProductoCreate, ProductoResponse, ProductoUpdate
 from security import get_current_user
 from storage import guardar_archivo, eliminar_archivo
+from modulos import require_modulo
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
-router = APIRouter(prefix="/productos", tags=["Productos"])
+router = APIRouter(prefix="/productos", tags=["Productos"], dependencies=[Depends(require_modulo("tienda"))])
 
 
 def _require_admin_or_coach(current_user: Usuario = Depends(get_current_user)):

@@ -8,8 +8,9 @@ from database import get_db
 from models import MovimientoFinanciero, Producto, TipoMovimiento, Usuario, Venta
 from schemas.venta import VentaCreate, VentaResponse
 from security import get_current_user
+from modulos import require_modulo
 
-router = APIRouter(prefix="/ventas", tags=["Ventas"])
+router = APIRouter(prefix="/ventas", tags=["Ventas"], dependencies=[Depends(require_modulo("tienda"))])
 
 
 @router.post("/", response_model=VentaResponse, status_code=status.HTTP_201_CREATED)

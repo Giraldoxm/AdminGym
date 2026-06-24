@@ -7,7 +7,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Pago, Plan, RolUsuario, Usuario
+from models import Gimnasio, GimnasioModulo, Modulo, Pago, Plan, RolUsuario, Usuario
 from schemas.usuario import UsuarioUpdate
 from security import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, get_password_hash, verify_password, get_current_user
 from storage import guardar_archivo, eliminar_archivo
@@ -21,16 +21,52 @@ ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 DEFAULT_GYM_ID = 1
 
 
+@router.get("/gimnasios")
+def listar_gimnasios_publicos(db: Session = Depends(get_db)):
+    """Lista los gimnasios activos para el selector del login. Solo expone
+    nombre y slug (datos no sensibles) para que el cliente indique a qué tenant
+    quiere autenticarse cuando hay emails repetidos entre gimnasios."""
+    gyms = db.query(Gimnasio).filter(Gimnasio.activo == True).order_by(Gimnasio.nombre).all()
+    return [{"slug": g.slug, "nombre": g.nombre} for g in gyms]
+
+
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    gym_slug: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
     email_norm = (form_data.username or "").strip().lower()
-    usuario = db.query(Usuario).filter(Usuario.email == email_norm).first()
+
+    # Resolución de tenant: si el cliente indica `gym_slug`, el login se acota a
+    # ese gimnasio (necesario cuando dos gimnasios comparten un email). Sin slug,
+    # se conserva el comportamiento legacy de "primer match por email".
+    query = db.query(Usuario).filter(Usuario.email == email_norm)
+    if gym_slug:
+        gimnasio = db.query(Gimnasio).filter(Gimnasio.slug == gym_slug.strip().lower()).first()
+        if not gimnasio:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Gimnasio no encontrado",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        query = query.filter(Usuario.gym_id == gimnasio.id)
+
+    usuario = query.first()
     if not usuario or not verify_password(form_data.password, usuario.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    gimnasio = db.query(Gimnasio).filter(Gimnasio.id == usuario.gym_id).first()
+    if gimnasio is None or not gimnasio.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Este gimnasio está suspendido. Contacta al administrador.",
+        )
+
     access_token = create_access_token(
         data={"sub": usuario.email, "gym_id": usuario.gym_id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -53,20 +89,36 @@ def registro_publico(
     documento_identidad: str = Form(..., min_length=5, max_length=20),
     genero: str = Form(...),
     telefono: str = Form(..., min_length=7, max_length=20),
+    gym_slug: Optional[str] = Form(None),
     foto: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
     if genero not in ("masculino", "femenino"):
         raise HTTPException(status_code=422, detail="Género inválido.")
+
+    # Resolución de tenant: el link de registro de cada gimnasio trae su `gym_slug`
+    # (ej. /registro?gym=crossfit-demo). Sin slug, cae al gym por defecto (compat.
+    # con instalaciones de un solo tenant).
+    target_gym_id = DEFAULT_GYM_ID
+    if gym_slug:
+        gimnasio = (
+            db.query(Gimnasio)
+            .filter(Gimnasio.slug == gym_slug.strip().lower(), Gimnasio.activo == True)
+            .first()
+        )
+        if not gimnasio:
+            raise HTTPException(status_code=400, detail="Gimnasio no encontrado o inactivo.")
+        target_gym_id = gimnasio.id
+
     email = (email or "").strip().lower()
     documento_identidad = (documento_identidad or "").strip()
-    if db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == DEFAULT_GYM_ID).first():
+    if db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == target_gym_id).first():
         raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese email.")
-    if db.query(Usuario).filter(Usuario.documento_identidad == documento_identidad, Usuario.gym_id == DEFAULT_GYM_ID).first():
+    if db.query(Usuario).filter(Usuario.documento_identidad == documento_identidad, Usuario.gym_id == target_gym_id).first():
         raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese documento de identidad.")
 
     nuevo = Usuario(
-        gym_id=DEFAULT_GYM_ID,
+        gym_id=target_gym_id,
         nombre=nombre,
         email=email,
         password_hash=get_password_hash(password),
@@ -108,6 +160,21 @@ def _serialize_me(current_user: Usuario, db: Session) -> dict:
                     "beneficios": plan.beneficios,
                     "incluye_wods_personalizados": plan.incluye_wods_personalizados,
                 }
+    # Módulos activos del gimnasio del usuario (feature flags) — el frontend los
+    # usa para ocultar secciones (WODs, biometría) que el gym no tiene contratadas.
+    modulos_activos = [
+        clave
+        for (clave,) in (
+            db.query(Modulo.clave)
+            .join(GimnasioModulo, GimnasioModulo.modulo_id == Modulo.id)
+            .filter(
+                GimnasioModulo.gym_id == current_user.gym_id,
+                GimnasioModulo.activo == True,
+            )
+            .all()
+        )
+    ]
+    gimnasio = db.query(Gimnasio).filter(Gimnasio.id == current_user.gym_id).first()
     return {
         "id": current_user.id,
         "nombre": current_user.nombre,
@@ -123,6 +190,10 @@ def _serialize_me(current_user: Usuario, db: Session) -> dict:
         "plan_solicitado_id": current_user.plan_solicitado_id,
         "incluye_wods_personalizados": incluye_wods_personalizados,
         "plan_actual": plan_actual,
+        "gym_id": current_user.gym_id,
+        "gym_nombre": gimnasio.nombre if gimnasio else None,
+        "gym_slug": gimnasio.slug if gimnasio else None,
+        "modulos_activos": modulos_activos,
     }
 
 
