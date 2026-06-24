@@ -18,7 +18,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
-        <h1 class="text-xl font-extrabold tracking-wider">Jain Sport Box</h1>
+        <h1 class="text-xl font-extrabold tracking-wider truncate">{{ gymNombre }}</h1>
         <!-- Cerrar en móvil -->
         <button @click="sidebarOpen = false" class="ml-auto md:hidden text-gray-400 hover:text-white p-1">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -68,7 +68,7 @@
           <div class="pt-2 pb-1 px-2">
             <p class="text-xs font-bold text-gray-500 uppercase tracking-widest">Gestión</p>
           </div>
-          <router-link to="/usuarios" @click="sidebarOpen = false"
+          <router-link v-if="tieneModulo('usuarios')" to="/usuarios" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -76,7 +76,7 @@
             </svg>
             Usuarios
           </router-link>
-          <router-link to="/sesiones" @click="sidebarOpen = false"
+          <router-link v-if="tieneModulo('sesiones')" to="/sesiones" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -84,7 +84,7 @@
             </svg>
             Sesiones
           </router-link>
-          <router-link to="/alertas" @click="sidebarOpen = false"
+          <router-link v-if="tieneModulo('alertas')" to="/alertas" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -92,7 +92,7 @@
             </svg>
             Alertas WhatsApp
           </router-link>
-          <router-link to="/ejercicios" @click="sidebarOpen = false"
+          <router-link v-if="tieneModulo('ejercicios')" to="/ejercicios" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -109,7 +109,7 @@
             </svg>
             Planes
           </router-link>
-          <router-link v-if="isAdmin" to="/finanzas" @click="sidebarOpen = false"
+          <router-link v-if="isAdmin && tieneModulo('finanzas')" to="/finanzas" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -124,7 +124,7 @@
           <div class="pt-2 pb-1 px-2">
             <p class="text-xs font-bold text-gray-500 uppercase tracking-widest">Contenido</p>
           </div>
-          <router-link v-if="!membresiaVencida" to="/wods" @click="sidebarOpen = false"
+          <router-link v-if="!membresiaVencida && tieneWods" to="/wods" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,7 +132,7 @@
             </svg>
             WODs
           </router-link>
-          <router-link v-if="!membresiaVencida && (canManage || tieneWodsPersonalizados)" to="/wods/personalizados" @click="sidebarOpen = false"
+          <router-link v-if="!membresiaVencida && tieneWods && (canManage || tieneWodsPersonalizados)" to="/wods/personalizados" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -140,7 +140,7 @@
             </svg>
             WODs Personalizados
           </router-link>
-          <router-link v-if="canManage" to="/tienda" @click="sidebarOpen = false"
+          <router-link v-if="canManage && tieneModulo('tienda')" to="/tienda" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -171,7 +171,7 @@
             </svg>
             Planes
           </router-link>
-          <router-link v-if="isCliente && !membresiaVencida" to="/salud" @click="sidebarOpen = false"
+          <router-link v-if="isCliente && !membresiaVencida && tieneModulo('salud')" to="/salud" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -179,7 +179,7 @@
             </svg>
             Mi Salud
           </router-link>
-          <router-link v-if="!membresiaVencida" to="/marcas" @click="sidebarOpen = false"
+          <router-link v-if="!membresiaVencida && tieneModulo('marcas')" to="/marcas" @click="sidebarOpen = false"
             class="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
             active-class="bg-red-600 hover:bg-red-700 font-semibold shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -234,7 +234,7 @@
           </svg>
           <span class="font-semibold text-sm">Cerrar Sesión</span>
         </button>
-        <p class="text-xs text-gray-600 text-center mt-3">&copy; 2026 Jain Sport Box</p>
+        <p class="text-xs text-gray-600 text-center mt-3">&copy; 2026 {{ gymNombre }}</p>
       </div>
     </aside>
 
@@ -251,7 +251,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
         </svg>
-        <span class="font-extrabold tracking-wider text-base">Jain Sport Box</span>
+        <span class="font-extrabold tracking-wider text-base truncate">{{ gymNombre }}</span>
       </header>
 
       <!-- Content -->
@@ -267,12 +267,14 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth, setFechaVencimiento } from '../composables/useAuth'
+import { useAuth, setFechaVencimiento, setGymNombre } from '../composables/useAuth'
+import { useModulos, setModulos, clearModulos } from '../composables/useModulos'
 import { useSessionMarca } from '../composables/useSessionMarca'
 import api from '../api'
 
 const router = useRouter()
-const { nombre, rol, isAdmin, isCoach, isCliente, isPendiente, canManage, membresiaVencida } = useAuth()
+const { nombre, gymNombre, rol, isAdmin, isCoach, isCliente, isPendiente, canManage, membresiaVencida } = useAuth()
+const { tieneWods, tieneModulo } = useModulos()
 const { sesion, tieneSession, cancelarSesion } = useSessionMarca()
 
 const sidebarOpen = ref(false)
@@ -285,9 +287,14 @@ function irASesion() {
 const tieneWodsPersonalizados = ref(localStorage.getItem('tieneWodsPersonalizados') === 'true')
 
 onMounted(async () => {
-  if (!isCliente.value) return
   try {
     const { data } = await api.get('/me')
+    // Módulos activos del gym: refrescar para todos los roles (el admin también
+    // ve secciones gateadas como WODs).
+    setModulos(data.modulos_activos || null)
+    setGymNombre(data.gym_nombre || '')
+    localStorage.setItem('gymSlug', data.gym_slug || '')
+    if (!isCliente.value) return
     tieneWodsPersonalizados.value = !!data.incluye_wods_personalizados
     localStorage.setItem('tieneWodsPersonalizados', String(tieneWodsPersonalizados.value))
     if (data.genero) localStorage.setItem('userGenero', data.genero)
@@ -309,6 +316,9 @@ const logout = () => {
   localStorage.removeItem('fechaVencimiento')
   localStorage.removeItem('tieneWodsPersonalizados')
   localStorage.removeItem('userGenero')
+  clearModulos()
+  setGymNombre('')
+  localStorage.removeItem('gymSlug')
   router.push('/login')
 }
 </script>

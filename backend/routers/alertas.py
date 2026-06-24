@@ -8,8 +8,9 @@ from database import get_db
 from models import AlertaMembresia, RolUsuario, Usuario
 from schemas.alerta import AlertaResponse
 from security import get_current_user
+from modulos import require_modulo
 
-router = APIRouter(prefix="/alertas", tags=["Alertas"])
+router = APIRouter(prefix="/alertas", tags=["Alertas"], dependencies=[Depends(require_modulo("alertas"))])
 
 VENTANA_DIAS = 7
 

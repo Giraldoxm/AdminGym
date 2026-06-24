@@ -18,10 +18,10 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         manifest: {
-          name: 'JainSportBox',
-          short_name: 'JainBox',
+          name: 'AdminGym',
+          short_name: 'AdminGym',
           lang: 'es',
-          description: 'Gestión de tu box de CrossFit: WODs, marcas, membresía y asistencia.',
+          description: 'Gestión de tu gimnasio: WODs, marcas, membresía y asistencia.',
           theme_color: '#dc2626',
           background_color: '#ffffff',
           display: 'standalone',

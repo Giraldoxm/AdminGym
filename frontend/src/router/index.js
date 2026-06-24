@@ -18,12 +18,30 @@ import SesionesView from '../views/SesionesView.vue'
 import EjerciciosView from '../views/EjerciciosView.vue'
 import WodFormView from '../views/WodFormView.vue'
 import MiPerfilView from '../views/MiPerfilView.vue'
+import SuperAdminLoginView from '../views/SuperAdminLoginView.vue'
+import SuperAdminView from '../views/SuperAdminView.vue'
 
 const routes = [
   {
     path: '/login',
     name: 'Login',
     component: LoginView
+  },
+  {
+    path: '/registro',
+    name: 'Registro',
+    component: LoginView
+  },
+  {
+    path: '/superadmin/login',
+    name: 'SuperAdminLogin',
+    component: SuperAdminLoginView
+  },
+  {
+    path: '/superadmin',
+    name: 'SuperAdmin',
+    component: SuperAdminView,
+    meta: { superadmin: true }
   },
   {
     path: '/',
@@ -43,13 +61,13 @@ const routes = [
         path: 'usuarios',
         name: 'Usuarios',
         component: UsuariosView,
-        meta: { roles: ['admin', 'coach'] }
+        meta: { roles: ['admin', 'coach'], modulo: 'usuarios' }
       },
       {
         path: 'usuarios/:id',
         name: 'UsuarioPerfil',
         component: UsuarioPerfilView,
-        meta: { roles: ['admin', 'coach'] }
+        meta: { roles: ['admin', 'coach'], modulo: 'usuarios' }
       },
       {
         path: 'planes',
@@ -61,78 +79,79 @@ const routes = [
         path: 'tienda',
         name: 'Tienda',
         component: TiendaView,
-        meta: { roles: ['admin', 'coach'] }
+        meta: { roles: ['admin', 'coach'], modulo: 'tienda' }
       },
       {
         path: 'wods',
         name: 'WODs',
-        component: WodsView
+        component: WodsView,
+        meta: { modulo: 'wods' }
       },
       {
         path: 'wods/nuevo',
         name: 'WodNuevo',
         component: WodFormView,
-        meta: { roles: ['admin', 'coach'], personalizado: false },
+        meta: { roles: ['admin', 'coach'], personalizado: false, modulo: 'wods' },
       },
       {
         path: 'wods/:id/editar',
         name: 'WodEditar',
         component: WodFormView,
-        meta: { roles: ['admin', 'coach'], personalizado: false },
+        meta: { roles: ['admin', 'coach'], personalizado: false, modulo: 'wods' },
       },
       {
         path: 'wods/personalizados/nuevo',
         name: 'WodPersonalizadoNuevo',
         component: WodFormView,
-        meta: { roles: ['admin', 'coach'], personalizado: true },
+        meta: { roles: ['admin', 'coach'], personalizado: true, modulo: 'wods' },
       },
       {
         path: 'wods/personalizados/:id/editar',
         name: 'WodPersonalizadoEditar',
         component: WodFormView,
-        meta: { roles: ['admin', 'coach'], personalizado: true },
+        meta: { roles: ['admin', 'coach'], personalizado: true, modulo: 'wods' },
       },
       {
         path: 'finanzas',
         name: 'Finanzas',
         component: FinanzasView,
-        meta: { roles: ['admin'] }
+        meta: { roles: ['admin'], modulo: 'finanzas' }
       },
       {
         path: 'salud',
         name: 'Salud',
         component: SaludView,
-        meta: { roles: ['coach', 'cliente'] },
+        meta: { roles: ['coach', 'cliente'], modulo: 'salud' },
       },
       {
         path: 'salud/:tipo',
         name: 'SaludMedida',
         component: SaludMedidaView,
-        meta: { roles: ['coach', 'cliente'] },
+        meta: { roles: ['coach', 'cliente'], modulo: 'salud' },
       },
       {
         path: 'marcas',
         name: 'Marcas',
         component: MarcasView,
-        meta: { roles: ['coach', 'cliente'] },
+        meta: { roles: ['coach', 'cliente'], modulo: 'marcas' },
       },
       {
         path: 'marcas/:ejercicio',
         name: 'MarcasEjercicio',
         component: MarcasEjercicioView,
-        meta: { roles: ['coach', 'cliente'] },
+        meta: { roles: ['coach', 'cliente'], modulo: 'marcas' },
       },
       {
         path: 'alertas',
         name: 'Alertas',
         component: AlertasView,
-        meta: { roles: ['admin', 'coach'] },
+        meta: { roles: ['admin', 'coach'], modulo: 'alertas' },
       },
       {
         path: 'wods/personalizados',
         name: 'WodsPersonalizados',
         component: WodsPersonalizadosView,
-        meta: { roles: ['admin', 'coach', 'cliente'] },
+        meta: { roles: ['admin', 'coach', 'cliente'], modulo: 'wods' },
       },
       {
         path: 'home',
@@ -144,13 +163,13 @@ const routes = [
         path: 'sesiones',
         name: 'Sesiones',
         component: SesionesView,
-        meta: { roles: ['admin', 'coach'] },
+        meta: { roles: ['admin', 'coach'], modulo: 'sesiones' },
       },
       {
         path: 'ejercicios',
         name: 'Ejercicios',
         component: EjerciciosView,
-        meta: { roles: ['admin', 'coach'] },
+        meta: { roles: ['admin', 'coach'], modulo: 'ejercicios' },
       },
       {
         path: 'perfil',
@@ -168,11 +187,20 @@ const router = createRouter({
 })
 
 import { membresiaVencidaFor } from '../composables/useAuth'
+import { tieneModuloFor } from '../composables/useModulos'
 
 // Rutas permitidas para clientes con membresía vencida
 const RUTAS_CLIENTE_VENCIDO = ['/home', '/planes', '/perfil', '/']
 
 router.beforeEach((to, from, next) => {
+  // ── Panel SuperAdmin: flujo de auth independiente del gym ──
+  if (to.meta.superadmin) {
+    return localStorage.getItem('superToken') ? next() : next('/superadmin/login')
+  }
+  if (to.path === '/superadmin/login') {
+    return localStorage.getItem('superToken') ? next('/superadmin') : next()
+  }
+
   const token = localStorage.getItem('token')
   const rol = localStorage.getItem('userRol') || 'cliente'
 
@@ -180,7 +208,7 @@ router.beforeEach((to, from, next) => {
     return next('/login')
   }
 
-  if (to.path === '/login' && token) {
+  if ((to.path === '/login' || to.path === '/registro') && token) {
     return next('/')
   }
 
@@ -201,6 +229,13 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.roles && !to.meta.roles.includes(rol)) {
     return next(rol === 'admin' ? '/usuarios' : '/home')
+  }
+
+  // Módulo (feature flag) requerido por la ruta no activo para el gym → fuera.
+  // El fallback es '/perfil' (nunca gateado por módulo) para evitar bucles cuando
+  // la propia ruta de destino del rol (p.ej. admin → /usuarios) está deshabilitada.
+  if (token && to.meta.modulo && !tieneModuloFor(to.meta.modulo)) {
+    return next('/perfil')
   }
 
   next()

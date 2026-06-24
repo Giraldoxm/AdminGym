@@ -9,8 +9,9 @@ from database import get_db
 from models import MarcaRM, Usuario
 from schemas.marcas import MarcaRMCreate, MarcaRMResponse
 from security import get_current_user
+from modulos import require_modulo
 
-router = APIRouter(prefix="/marcas", tags=["Marcas RM"])
+router = APIRouter(prefix="/marcas", tags=["Marcas RM"], dependencies=[Depends(require_modulo("marcas"))])
 
 
 # Clasificación por ejercicio (debe coincidir con frontend/src/data/ejerciciosMarcas.js)

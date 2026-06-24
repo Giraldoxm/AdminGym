@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from database import SessionLocal
-from models import GimnasioModulo, Modulo, Plan, SuperAdmin, Usuario, RolUsuario
+from models import Gimnasio, GimnasioModulo, Modulo, Plan, SuperAdmin, Usuario, RolUsuario
 from security import get_password_hash
 
 import json as _json
@@ -41,6 +41,35 @@ def _admin_config() -> dict:
         "telefono":            os.environ["ADMIN_TELEFONO"],
         "documento_identidad": os.environ["ADMIN_DOCUMENTO"],
     }
+
+def seed_gimnasio_default():
+    """Crea el gimnasio por defecto (DEFAULT_GYM_ID = 1) si no existe.
+
+    En SQLite esto lo hacía la migración de main.py, pero en Postgres ese bloque
+    está saltado, así que la tabla `gimnasios` quedaba vacía y los seeds de
+    planes/admin/módulos (que referencian gym_id=1 vía FK) reventaban. Este seed
+    corre en cualquier backend y debe ejecutarse ANTES que los demás.
+
+    En una base fresca, el primer gimnasio insertado toma id=1 naturalmente, que
+    es lo que asumen DEFAULT_GYM_ID y las FKs. El nombre/slug son configurables
+    por entorno (se pueden cambiar luego desde el panel SuperAdmin)."""
+    db = SessionLocal()
+    try:
+        existente = db.query(Gimnasio).filter(Gimnasio.id == DEFAULT_GYM_ID).first()
+        if existente:
+            print(f"  · Gimnasio por defecto (id={DEFAULT_GYM_ID}) ya existe")
+            return
+        gym = Gimnasio(
+            nombre=os.environ.get("DEFAULT_GYM_NOMBRE", "Mi Gimnasio"),
+            slug=os.environ.get("DEFAULT_GYM_SLUG", "mi-gimnasio"),
+            activo=True,
+        )
+        db.add(gym)
+        db.commit()
+        print(f"  + Gimnasio por defecto creado (id={gym.id}, '{gym.nombre}')")
+    finally:
+        db.close()
+
 
 def seed_planes():
     db = SessionLocal()
@@ -90,8 +119,16 @@ def seed_admin():
 
 
 MODULOS_DEFAULT = [
+    {"clave": "usuarios", "nombre": "Usuarios", "descripcion": "Gestión de miembros del gimnasio (alta, edición, membresías)."},
+    {"clave": "finanzas", "nombre": "Finanzas", "descripcion": "Ingresos, movimientos financieros y reportes."},
+    {"clave": "tienda", "nombre": "Tienda", "descripcion": "Catálogo de productos y registro de ventas."},
     {"clave": "wods", "nombre": "WODs y puntuación", "descripcion": "Registro y puntuación de WODs (regulares y personalizados)."},
-    {"clave": "biometria", "nombre": "Biometría (huella)", "descripcion": "Integración con el lector de huellas U.are.U 4500 para control de acceso."},
+    {"clave": "biometria", "nombre": "Huella / Huellero", "descripcion": "Lector de huellas U.are.U 4500: enrolamiento, búsqueda por huella y control de acceso (palanquera)."},
+    {"clave": "salud", "nombre": "Mi Salud", "descripcion": "Medidas de salud y composición corporal de cada miembro."},
+    {"clave": "marcas", "nombre": "Mis Marcas (1RM)", "descripcion": "Records personales y cálculo de 1RM por ejercicio."},
+    {"clave": "sesiones", "nombre": "Sesiones / Asistencia", "descripcion": "Consulta de asistencias por bloque horario y quién está en el box."},
+    {"clave": "alertas", "nombre": "Alertas WhatsApp", "descripcion": "Recordatorios de vencimiento de membresía vía WhatsApp."},
+    {"clave": "ejercicios", "nombre": "Ejercicios", "descripcion": "Catálogo de ejercicios del gimnasio (usado al armar WODs)."},
 ]
 
 
@@ -109,6 +146,11 @@ def seed_modulos():
                 db.add(modulo)
                 db.flush()
                 print(f"  + Módulo '{datos['clave']}' creado")
+            elif modulo.nombre != datos["nombre"] or modulo.descripcion != datos["descripcion"]:
+                # Mantener nombre/descripción del catálogo al día (idempotente).
+                modulo.nombre = datos["nombre"]
+                modulo.descripcion = datos["descripcion"]
+                print(f"  · Módulo '{datos['clave']}' actualizado")
 
             activacion = db.query(GimnasioModulo).filter(
                 GimnasioModulo.gym_id == DEFAULT_GYM_ID,
@@ -150,6 +192,8 @@ def seed_superadmin():
 
 
 if __name__ == "__main__":
+    print("Sembrando gimnasio por defecto...")
+    seed_gimnasio_default()
     print("Sembrando planes por defecto...")
     seed_planes()
     print("Sembrando usuario admin...")

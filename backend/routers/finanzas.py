@@ -9,8 +9,9 @@ from database import get_db
 from models import MovimientoFinanciero, Pago, Plan, RolUsuario, TipoMovimiento, Usuario, Venta
 from schemas.finanza import BalanceResponse, MovimientoCreate
 from security import get_current_user
+from modulos import require_modulo
 
-router = APIRouter(prefix="/finanzas", tags=["Finanzas"])
+router = APIRouter(prefix="/finanzas", tags=["Finanzas"], dependencies=[Depends(require_modulo("finanzas"))])
 
 
 def _require_admin(current_user: Usuario = Depends(get_current_user)):

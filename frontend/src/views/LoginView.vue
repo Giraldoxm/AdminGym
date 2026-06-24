@@ -11,25 +11,12 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
-        <h1 class="text-2xl font-extrabold text-gray-800 tracking-tight">Jain Sport Box</h1>
-      </div>
-
-      <!-- Tabs -->
-      <div class="flex mx-8 mb-6 bg-gray-100 rounded-xl p-1">
-        <button @click="tab = 'login'"
-          class="flex-1 py-2 rounded-lg text-sm font-bold transition-all"
-          :class="tab === 'login' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'">
-          Iniciar Sesión
-        </button>
-        <button @click="tab = 'registro'"
-          class="flex-1 py-2 rounded-lg text-sm font-bold transition-all"
-          :class="tab === 'registro' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'">
-          Registrarse
-        </button>
+        <h1 class="text-2xl font-extrabold text-gray-800 tracking-tight">AdminGym</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ esRegistro ? 'Crea tu cuenta' : 'Inicia sesión' }}</p>
       </div>
 
       <!-- ── FORMULARIO LOGIN ── -->
-      <form v-if="tab === 'login'" @submit.prevent="handleLogin" class="px-8 pb-8 space-y-5">
+      <form v-if="!esRegistro" @submit.prevent="handleLogin" class="px-8 pb-8 pt-2 space-y-5">
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-1.5">Correo Electrónico</label>
           <input v-model="loginEmail" type="email" required
@@ -67,7 +54,7 @@
           </svg>
           <p class="font-bold text-emerald-800">¡Registro exitoso!</p>
           <p class="text-sm text-emerald-700 mt-1">Tu cuenta está pendiente de aprobación. Inicia sesión para ver los planes disponibles.</p>
-          <button type="button" @click="tab = 'login'; registroExitoso = false"
+          <button type="button" @click="router.push('/login')"
             class="mt-3 text-sm font-semibold text-emerald-700 underline hover:text-emerald-900">
             Ir a iniciar sesión
           </button>
@@ -98,6 +85,22 @@
             </div>
             <p class="text-xs text-gray-400">Foto de perfil <span class="text-gray-300">(opcional)</span></p>
             <input ref="inputFoto" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="onFotoChange"/>
+          </div>
+
+          <!-- Gimnasio destino del registro -->
+          <div v-if="regGymFijado" class="bg-red-50 border border-red-100 rounded-lg p-3 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m2-14h14M9 7h1m-1 4h1m4-4h1m-1 4h1" />
+            </svg>
+            <p class="text-sm text-gray-700">Te registras en <span class="font-bold text-red-700">{{ regGymNombre() }}</span></p>
+          </div>
+          <div v-else-if="gimnasios.length > 1">
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Gimnasio <span class="text-red-500">*</span></label>
+            <select v-model="regGymSlug" required
+              class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-500 outline-none transition-all text-sm bg-white">
+              <option value="" disabled>Selecciona tu gimnasio</option>
+              <option v-for="g in gimnasios" :key="g.slug" :value="g.slug">{{ g.nombre }}</option>
+            </select>
           </div>
 
           <div>
@@ -170,14 +173,49 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import { setModulos } from '../composables/useModulos'
+import { setGymNombre } from '../composables/useAuth'
 
 const router = useRouter()
-const tab = ref('login')
+const route = useRoute()
+
+// El registro vive en su propia ruta (/registro?gym=<slug>); /login es solo
+// iniciar sesión. La vista se decide por la ruta, sin pestañas.
+const esRegistro = computed(() => route.path === '/registro')
+
+// ── Tenant del registro ────────────────────────────────────────
+// Cada gimnasio comparte su propio link de registro: /registro?gym=<slug>.
+// Si el slug viene en la URL, el gym queda fijado (se muestra el nombre, sin
+// selector). Si no, se muestra un selector con los gimnasios activos (fallback).
+const gimnasios = ref([])
+const regGymSlug = ref('')          // slug elegido/fijado para el registro
+const regGymFijado = ref(false)     // true si vino por la URL (?gym=)
+
+onMounted(async () => {
+  if (!esRegistro.value) return     // en /login no hace falta cargar gimnasios
+  const slugUrl = (route.query.gym || '').toString().trim().toLowerCase()
+  try {
+    const { data } = await api.get('/gimnasios')
+    gimnasios.value = Array.isArray(data) ? data : []
+    if (slugUrl && gimnasios.value.some(g => g.slug === slugUrl)) {
+      regGymSlug.value = slugUrl
+      regGymFijado.value = true
+    } else if (gimnasios.value.length === 1) {
+      regGymSlug.value = gimnasios.value[0].slug
+      regGymFijado.value = true
+    }
+  } catch { /* si falla, el registro cae al gym por defecto en el backend */ }
+})
+
+const regGymNombre = () => gimnasios.value.find(g => g.slug === regGymSlug.value)?.nombre || ''
 
 // ── Login ──────────────────────────────────────────────────────
+// El usuario se identifica solo con email + contraseña: cada cuenta es única y
+// el backend resuelve su gimnasio (gym_id) a partir de la credencial. No hay
+// selector de gimnasio en la UI.
 const loginEmail = ref('')
 const loginPassword = ref('')
 const loginError = ref('')
@@ -197,12 +235,19 @@ const handleLogin = async () => {
     localStorage.setItem('userRol', me.data.rol)
     localStorage.setItem('userName', me.data.nombre)
     localStorage.setItem('fechaVencimiento', me.data.fecha_vencimiento || '')
+    setModulos(me.data.modulos_activos || null)
+    setGymNombre(me.data.gym_nombre || '')
+    localStorage.setItem('gymSlug', me.data.gym_slug || '')
 
     router.push('/')
   } catch (e) {
-    loginError.value = e.response?.status === 401
-      ? 'Credenciales incorrectas. Verifica tu email y contraseña.'
-      : 'Error al conectar con el servidor.'
+    if (e.response?.status === 401) {
+      loginError.value = 'Credenciales incorrectas. Verifica tu email y contraseña.'
+    } else if (e.response?.data?.detail) {
+      loginError.value = e.response.data.detail   // p.ej. gimnasio suspendido (403)
+    } else {
+      loginError.value = 'Error al conectar con el servidor.'
+    }
   } finally {
     loginLoading.value = false
   }
@@ -229,6 +274,10 @@ const handleRegistro = async () => {
     registroError.value = 'Selecciona tu género.'
     return
   }
+  if (gimnasios.value.length > 1 && !regGymSlug.value) {
+    registroError.value = 'Selecciona tu gimnasio.'
+    return
+  }
   registroLoading.value = true
   try {
     const fd = new FormData()
@@ -238,6 +287,7 @@ const handleRegistro = async () => {
     fd.append('documento_identidad', regForm.value.documento_identidad)
     fd.append('genero', regForm.value.genero)
     fd.append('telefono', regForm.value.telefono)
+    if (regGymSlug.value) fd.append('gym_slug', regGymSlug.value)
     if (fotoArchivo.value) fd.append('foto', fotoArchivo.value)
 
     await api.post('/registro', fd, { headers: { 'Content-Type': 'multipart/form-data' } })

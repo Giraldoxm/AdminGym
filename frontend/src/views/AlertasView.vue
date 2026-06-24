@@ -158,6 +158,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import { useAuth } from '../composables/useAuth'
+
+const { gymNombre } = useAuth()
 
 const alertas = ref([])
 const cargando = ref(true)
@@ -228,7 +231,7 @@ function whatsappLink(alerta) {
   const dias = alerta.dias_anticipacion
   const fecha = formatFecha(alerta.fecha_vencimiento)
   const msg =
-    `Hola ${alerta.usuario_nombre}! 👋 Te recordamos que tu membresía en *Jain Sport Box* vence ` +
+    `Hola ${alerta.usuario_nombre}! 👋 Te recordamos que tu membresía en *${gymNombre.value}* vence ` +
     (dias === 1 ? `*mañana* (${fecha})` : `en *${dias} días* (${fecha})`) +
     `. Para renovar contáctanos. 💪🔥`
   return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`

@@ -10,10 +10,11 @@ Este documento es el registro vivo de avance. Actualízalo cuando se cierre o se
 |---|---|
 | Fase 1 — Aislamiento de datos (`gym_id`) | ✅ Completa |
 | Fase 2 — Feature flags por módulo | ✅ Completa |
-| Fase 3 — SuperAdmin | ✅ Completa (backend) |
-| Fase 4 — Bridge biométrico multi-gym | ❌ Pendiente |
-| Frontend SaaS (selector de gym, panel SuperAdmin) | ❌ Pendiente |
-| Verificación end-to-end con la app corriendo | ⚠️ Parcial — ver "Cómo verificar" |
+| Fase 3 — SuperAdmin | ✅ Completa (backend + frontend) |
+| Fase 4 — Bridge biométrico multi-gym | ❌ Pendiente (requiere hardware) |
+| Frontend SaaS (selector de gym, panel SuperAdmin, sidebar por módulo) | ✅ Completa |
+| Resolución de gym en el login (slug) | ✅ Completa |
+| Verificación end-to-end con la app corriendo | ✅ Backend verificado con uvicorn real — ver "Cómo verificar" |
 
 ## Fase 1 — Aislamiento de datos (completa)
 
@@ -54,25 +55,38 @@ Este documento es el registro vivo de avance. Actualízalo cuando se cierre o se
   - `GET /superadmin/gimnasios/{id}/modulos`, `PATCH /superadmin/gimnasios/{id}/modulos/{modulo_id}` (activar/desactivar un módulo para un gym)
 - Seed opcional (`backend/seed.py: seed_superadmin()`): solo crea el primer SuperAdmin si `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` están en el entorno — instalaciones de un solo gimnasio sin panel de SuperAdmin no necesitan definirlas.
 
+## Trabajo completado en esta iteración (web SaaS)
+
+### 1. Resolución de gimnasio en el login ✅
+- `POST /login` acepta un campo de formulario opcional `gym_slug`. Si viene, el login se acota a ese gimnasio (`Usuario.email + gym_id`); si el slug no existe → 401. Sin slug se conserva el fallback legacy "primer match por email" (compat. con instalaciones de un solo tenant).
+- Endpoint público `GET /gimnasios` (en `auth.py`) lista los gimnasios activos (`slug` + `nombre`) para alimentar el selector del login.
+- `LoginView.vue` carga `GET /gimnasios` al montar y muestra un `<select>` de gimnasio **solo si hay más de uno**; manda `gym_slug` en el POST de login.
+
+### 2. Frontend — panel de SuperAdmin ✅
+- Rutas top-level `/superadmin/login` y `/superadmin` (fuera del `Dashboard.vue` de gym), con guard propio en `router/index.js` basado en `localStorage.superToken` (token separado del de gym, scopes mutuamente excluyentes).
+- `superApi.js`: instancia axios dedicada que inyecta `superToken`.
+- `SuperAdminLoginView.vue` (login) y `SuperAdminView.vue` (listado de gimnasios, alta con admin inicial + módulos, activar/desactivar gym, toggle de módulos por gym). Consume `routers/superadmin.py`.
+
+### 4. Catálogo de módulos ampliado ✅
+- `MODULOS_DEFAULT` en `seed.py` pasó de 2 a **10 módulos**: `usuarios`, `finanzas`, `tienda`, `wods`, `biometria` (huella + huellero), `salud`, `marcas`, `sesiones`, `alertas`, `ejercicios`. `seed_modulos()` ahora también actualiza nombre/descripción de módulos ya existentes (idempotente) y activa todos para el gym 1.
+- **Gating backend (`require_modulo` a nivel router):** `wods`, `finanzas`, `tienda` (productos + ventas), `salud`, `marcas`, `alertas`, + `biometria` (endpoint-level, ya existía).
+- **Gating solo-frontend** (routers no gateados a propósito por ser base/cross-dep): `usuarios` (login/perfil/admin dependen de él), `sesiones` (asistencia la usa el bridge con `X-Bridge-Secret`), `ejercicios` (el editor de WODs necesita `GET /ejercicios` aunque el gym no gestione el catálogo).
+- Cross-dep `salud`↔`marcas`: la vista de Dominadas pide `GET /salud/peso` dentro de un try/catch silencioso, así que si `salud` está off pero `marcas` on, simplemente cae al input manual de peso corporal (sin error).
+- El panel SuperAdmin muestra automáticamente los 10 módulos (lee del catálogo) — sin cambios extra.
+
+### Selector de gym en el login: eliminado
+Cada cuenta es única (email + contraseña) y el backend resuelve el `gym_id` desde la credencial, así que el login **no** muestra selector de gimnasio. El parámetro `gym_slug` en `POST /login` y `GET /gimnasios` se conservan en el backend (útiles para subdominios a futuro) pero el frontend ya no los usa.
+
+### 3. Frontend — ocultar funcionalidad según módulo activo ✅
+- `_serialize_me` en `auth.py` ahora devuelve `modulos_activos: string[]` además de `gym_id`, `gym_nombre`, `gym_slug`.
+- Composable `useModulos.js`: `setModulos`/`clearModulos`/`tieneModulo(clave)` + `tieneModuloFor` para el guard. Guarda en `localStorage.modulosActivos`. **Ausencia de la clave = todos activos** (compat. hacia atrás).
+- `Dashboard.vue` oculta WODs / WODs Personalizados del sidebar si falta el módulo `wods`; refresca módulos en mount y los limpia en logout.
+- `router/index.js` gatea las rutas de WODs con `meta.modulo: 'wods'` (redirige si el gym no lo tiene).
+- `UsuariosView.vue` / `UsuarioPerfilView.vue` ocultan los botones de huella/palanquera y la card de huella si falta el módulo `biometria`.
+
 ## Próximos pasos (en orden recomendado)
 
-### 1. Resolución de gimnasio en el login (bloqueante para dar de alta un 2º gym real)
-Hoy `POST /login` busca por email sin contexto de tenant. Antes de tener un segundo gimnasio con usuarios reales, decidir y construir uno de:
-- Selector de gimnasio en el login (dropdown o input de slug) → el frontend manda `gym_slug` además de username/password.
-- Subdominio por gimnasio (`boxA.tudominio.com`) → el backend resuelve `gym_id` por `Host` header.
-- Mantener "primer match por email" solo como fallback de migración, deprecar luego.
-
-### 2. Frontend — panel de SuperAdmin
-No existe UI todavía. Construir un área separada (ruta `/superadmin`, login propio, fuera del `Dashboard.vue` de gym) que consuma `routers/superadmin.py`: alta de gimnasios, activar/desactivar módulos, ver listado.
-
-### 3. Frontend — ocultar funcionalidad según módulo activo
-`GET /me` no devuelve todavía qué módulos tiene activos el gym del usuario. Falta:
-- Ampliar `_serialize_me` en `auth.py` con `modulos_activos: string[]`.
-- `useAuth.js` (o un composable nuevo `useModulos.js`) que expone `tieneModulo(clave)`.
-- `Dashboard.vue` oculta WODs/Mis Marcas/biometría del sidebar si el módulo no está activo (mismo patrón que ya usan con roles).
-- Las vistas (`WodsView`, modal de huella) deben manejar el 403 de `require_modulo` con un mensaje claro en vez de un error genérico.
-
-### 4. Fase 4 — Bridge biométrico multi-gym
+### Fase 4 — Bridge biométrico multi-gym
 El bridge .NET no manda `gym_id`. Pendiente:
 - `BridgeConfig.cs`: nueva env var `JSB_GYM_ID`, fijada por gimnasio al desplegar el bridge en su PC física.
 - El bridge debe mandar `X-Gym-Id` (o equivalente) en sus llamadas HTTP al backend.
@@ -84,9 +98,16 @@ El bridge .NET no manda `gym_id`. Pendiente:
 
 ## Cómo verificar
 
-No se pudo correr un test end-to-end con `TestClient`/`uvicorn` real en el entorno donde se hizo este cambio (sin acceso a red para instalar `fastapi`/`sqlalchemy`). Lo que sí se validó:
-- `py_compile` sobre todo `backend/` — compila limpio.
-- Migraciones SQL críticas (gym_id en `usuarios`, reconstrucción de `ejercicios`) probadas contra SQLite real simulando el esquema legado: backfill, aislamiento entre gyms, rechazo de duplicados dentro del mismo gym, idempotencia en reintentos.
+**Backend — verificado con `uvicorn` real sobre SQLite** (iteración web SaaS). Flujos probados vía HTTP:
+- `GET /gimnasios` (público) lista los gimnasios activos.
+- Login del admin del gym 1 → `/me` devuelve `gym_id`, `gym_nombre`, `gym_slug` y `modulos_activos: ["wods","biometria"]`.
+- SuperAdmin: `POST /superadmin/login`, `POST /superadmin/gimnasios` (crea gym 2 + admin + módulo `wods`), `GET /superadmin/gimnasios`.
+- Login del admin del gym 2 con `gym_slug=crossfit-demo` → `/me` muestra `gym_id=2` y solo `["wods"]` (aislamiento de módulos OK). Slug equivocado o inexistente → 401.
+- Toggle de módulo `wods` off en gym 2 → `/me` refleja `[]` y `GET /wods/` responde **403** (`require_modulo`).
+
+**Frontend — no verificado en ejecución**: Node.js no está instalado en la máquina donde se hizo este cambio (`where node` vacío, sin `node_modules`), así que no se pudo correr `npm run build` ni `vite`. El código quedó escrito siguiendo los patrones existentes; **falta correr `npm install && npm run build` y un smoke test manual del login multi-gym, el sidebar por módulo y el panel `/superadmin`.**
+
+Migraciones SQL críticas (gym_id en `usuarios`, reconstrucción de `ejercicios`) ya estaban validadas en iteraciones previas: backfill, aislamiento entre gyms, rechazo de duplicados dentro del mismo gym, idempotencia.
 
 **Antes de desplegar a producción:**
 1. Correr `uvicorn main:app --reload` localmente con tu `.env` real sobre una **copia** de `crossfit.db` (no la de producción) y confirmar que arranca sin errores de migración.

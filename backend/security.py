@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from database import get_db
-from models import SuperAdmin, Usuario
+from models import Gimnasio, SuperAdmin, Usuario
 
 SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
@@ -55,6 +55,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
     user = db.query(Usuario).filter(Usuario.email == email, Usuario.gym_id == gym_id).first()
     if user is None:
+        raise credentials_exception
+
+    # Si el gimnasio fue desactivado por el SuperAdmin, sus usuarios pierden el
+    # acceso de inmediato (incluso con un token aún válido) → 401 para forzar logout.
+    gimnasio = db.query(Gimnasio).filter(Gimnasio.id == user.gym_id).first()
+    if gimnasio is None or not gimnasio.activo:
         raise credentials_exception
     return user
 
